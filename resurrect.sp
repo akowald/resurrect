@@ -110,12 +110,12 @@ public OnPluginEnd()
 {
 	Entity_Cleanup();
 
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, false);
+	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
 }
 
 public OnConfigsExecuted()
 {
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, false);
+	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
 }
 
 public OnMapStart()
@@ -160,12 +160,16 @@ Resurrect_IsEnabled()
 
 public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
 {
+#if defined DEBUG
+	PrintToServer("(Event_RoundStart)");
+#endif
+
 	if(!Resurrect_IsEnabled()) return;
 
 	Entity_Cleanup();
 	for(new i=0; i<sizeof(g_bPlayOnce); i++) g_bPlayOnce[i] = false;
 	
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, false); // Keep the arena timer out of order until we need it for our timer
+	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true); // Keep the arena timer out of order until we need it for our timer
 
 	// Disable the master control point so the game does not end when the player captures a control point
 	new iMaster = FindEntityByClassname(MaxClients+1, "team_control_point_master");
@@ -202,8 +206,8 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 		// Respawn time will be reset when the player begins capturing so this isn't that important
 		Resurrect_SetCaptureTime(GetConVarFloat(g_hCvarTimeCapMax));
 
-		HookSingleEntityOutput(iCaptureArea, "OnStartTeam1", EntityOutput_StartCapture, false);
-		HookSingleEntityOutput(iCaptureArea, "OnStartTeam2", EntityOutput_StartCapture, false);
+		HookSingleEntityOutput(iCaptureArea, "OnStartTeam1", Area_StartCapture, false);
+		HookSingleEntityOutput(iCaptureArea, "OnStartTeam2", Area_StartCapture, false);
 
 		// Hook touch 
 		SDKHook(iCaptureArea, SDKHook_StartTouch, Area_StartTouch);
@@ -296,10 +300,10 @@ public Logic_OnCapEnabled(const String:output[], caller, activator, Float:delay)
 	}
 }
 
-public EntityOutput_StartCapture(const String:output[], caller, activator, Float:delay)
+public Area_StartCapture(const String:output[], caller, activator, Float:delay)
 {
 #if defined DEBUG
-	PrintToServer("(EntityOutput_StartCapture) caller: %d activator: %d!", output, caller, activator);
+	PrintToServer("(Area_StartCapture) caller: %d activator: %d!", output, caller, activator);
 #endif
 
 	if(activator != EntRefToEntIndex(g_iRefCaptureArea)) return;
@@ -361,10 +365,10 @@ Entity_GetTimer()
 
 		g_iRefTimer = EntIndexToEntRef(iTimer);
 
-		HookSingleEntityOutput(iTimer, "OnFinished", EntityOutput_TimerFinished, true);
+		HookSingleEntityOutput(iTimer, "OnFinished", Timer_OnFinished, true);
 
 		// Enable this cvar to place the timer correctly in client's HUDs
-		SetConVarInt(g_hCvarArenaRoundTime, 9999, true, false);
+		SetConVarInt(g_hCvarArenaRoundTime, 9999, true, true);
 
 		return iTimer;
 	}
@@ -394,10 +398,10 @@ Timer_Cleanup()
 
 }
 
-public EntityOutput_TimerFinished(const String:output[], caller, activator, Float:delay)
+public Timer_OnFinished(const String:output[], caller, activator, Float:delay)
 {
 #if defined DEBUG
-	PrintToServer("(EntityOutput_TimerFinished) caller: %d activator: %d", caller, activator);
+	PrintToServer("(Timer_OnFinished) caller: %d activator: %d", caller, activator);
 #endif
 
 	if(activator != EntRefToEntIndex(g_iRefTimer)) return;
@@ -452,6 +456,10 @@ Resurrect_SetCaptureTime(Float:flCaptureTime)
 
 public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
 {
+#if defined DEBUG
+	PrintToServer("(Event_RoundActive)");
+#endif
+
 	if(!Resurrect_IsEnabled()) return;
 	if(!Resurrect_IsInRound()) return;
 	
@@ -501,6 +509,10 @@ public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontB
 
 public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
 {
+#if defined DEBUG
+	PrintToServer("(Event_PointCaptured)");
+#endif
+
 	if(!Resurrect_IsEnabled()) return;
 	if(!Resurrect_IsInRound()) return;
 
@@ -700,6 +712,8 @@ public Event_RoundWin(Handle:hEvent, const String:strEventName[], bool:bDontBroa
 	if(!Resurrect_IsEnabled()) return;
 	
 	Entity_Cleanup();
+
+	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
 }
 
 Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[])
@@ -721,6 +735,8 @@ Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[
 
 public Action:Command_Test(client, args)
 {
+	// Prints out the value of CTFObjectiveResource::m_flTeamCapTime[64]
+	// Note to self: Take a look at m_bCPCapRateScalesWithPlayers on hardhat
 	/*
 	new iObj = FindEntityByClassname(MaxClients+1, "tf_objective_resource");
 	if(iObj > MaxClients)
