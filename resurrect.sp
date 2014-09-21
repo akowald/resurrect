@@ -85,6 +85,8 @@ public Plugin:myinfo =
 
 public OnPluginStart()
 {
+	CreateConVar("resurrect_version", PLUGIN_VERSION, "Resurrection Version", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
+
 	g_hCvarEnabled = CreateConVar("resurrect_enabled", "1", "0/1 - Enable or disable the plugin.");
 	g_hCvarTimeCapMin = CreateConVar("resurrect_time_cap_min", "0.25", "Roughly the minimum time possible to capture the control point.");
 	g_hCvarTimeCapMax = CreateConVar("resurrect_time_cap_max", "0.55", "Roughly the max time possible to capture the control point.");
