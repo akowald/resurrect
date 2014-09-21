@@ -21,3 +21,6 @@ resurrect_time_turtle 81 // If a control point is held for this many seconds, th
 ###Install
 1. Install [SourceMod >= 1.6.2](http://www.sourcemod.net)
 2. Compile resurrect.sp and drop resurrect.smx into the `sourcemod/plugins/` directory.
+
+###License
+Released under GPLv3
