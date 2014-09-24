@@ -27,11 +27,14 @@
 #include <tf2_stocks>
 
 //#define DEBUG
-#define PLUGIN_VERSION "0.2"
+#define PLUGIN_VERSION "0.3"
 
 #define SOUND_REVIVE					"mvm/mvm_revive.wav"
 #define SOUND_WARN 						"misc/doomsday_lift_warning.wav"
 #define SOUND_MARKED 					"weapons/samurai/tf_marked_for_death_indicator.wav"
+
+#define CAPHUD_PARITY_BITS				6
+#define CAPHUD_PARITY_MASK				((1<<CAPHUD_PARITY_BITS)-1)
 
 new const String:g_strReviveDemo[][] = {"vo/demoman_mvm_resurrect01.wav", "vo/demoman_mvm_resurrect02.wav", "vo/demoman_mvm_resurrect03.wav", "vo/demoman_mvm_resurrect05.wav", "vo/demoman_mvm_resurrect06.wav", "vo/demoman_mvm_resurrect07.wav", "vo/demoman_mvm_resurrect08.wav", "vo/demoman_mvm_resurrect09.wav", "vo/demoman_mvm_resurrect10.wav", "vo/demoman_mvm_resurrect11.wav"};
 new const String:g_strReviveEngie[][] = {"vo/engineer_mvm_resurrect01.wav", "vo/engineer_mvm_resurrect02.wav", "vo/engineer_mvm_resurrect03.wav"};
@@ -51,6 +54,7 @@ new const String:g_strTeamColors[][] = {"\x07B2B2B2", "\x07B2B2B2", "\x07FF4040"
 #define TFTeam_Blue						3
 
 new bool:g_bIsArena;
+new bool:g_bEnabledForRound = false;
 
 new g_iRefCaptureArea;
 new g_iRefObj;
@@ -58,12 +62,14 @@ new g_iRefTimer;
 new bool:g_bPlayOnce[MAXPLAYERS+1];
 
 new Handle:g_hCvarEnabled;
-new Handle:g_hCvarTimeCapMin;
-new Handle:g_hCvarTimeCapMax;
 new Handle:g_hCvarTimeUnlock;
 new Handle:g_hCvarTimeMFD;
 new Handle:g_hCvarTimeImmunity;
 new Handle:g_hCvarTimeTurtle;
+new Handle:g_hCvarCapMid;
+new Handle:g_hCvarCapMin;
+new Handle:g_hCvarCapMax;
+new Handle:g_hCvarHealthBonus;
 
 new Handle:g_hCvarArenaRoundTime;
 
@@ -88,14 +94,19 @@ public OnPluginStart()
 	CreateConVar("resurrect_version", PLUGIN_VERSION, "Resurrection Version", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
 
 	g_hCvarEnabled = CreateConVar("resurrect_enabled", "1", "0/1 - Enable or disable the plugin.");
-	g_hCvarTimeCapMin = CreateConVar("resurrect_time_cap_min", "0.25", "Roughly the minimum time possible to capture the control point.");
-	g_hCvarTimeCapMax = CreateConVar("resurrect_time_cap_max", "0.55", "Roughly the max time possible to capture the control point.");
-	g_hCvarTimeUnlock = CreateConVar("resurrect_time_unlock", "15", "Seconds until the control point unlocks and players can cap.");
+	g_hCvarTimeUnlock = CreateConVar("resurrect_time_unlock", "25", "Seconds until the control point unlocks and players can cap.");
 	g_hCvarTimeMFD = CreateConVar("resurrect_time_mfd", "5.0", "Seconds after leaving a control point that mark for death effects remain on the player.");
 	g_hCvarTimeImmunity = CreateConVar("resurrect_time_immunity", "3.0", "Seconds of immunity after being resurrected.");
 	g_hCvarTimeTurtle = CreateConVar("resurrect_time_turtle", "81", "If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.");
+	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates.");
+
+	g_hCvarCapMin = CreateConVar("resurrect_cap_min", "0.25", "Minimum capture time when one team has fewer alive players.");
+	g_hCvarCapMid = CreateConVar("resurrect_cap_mid", "0.8", "Medium capture time when both teams have the same amount of alive players.");
+	g_hCvarCapMax = CreateConVar("resurrect_cap_max", "2.0", "Maximum capture time when one team has more alive players.");
 
 	g_hCvarArenaRoundTime = FindConVar("tf_arena_round_time");
+
+	Resurrect_StripNotifyFlag(g_hCvarArenaRoundTime, true);
 
 	HookEvent("teamplay_round_start", Event_RoundStart);
 	HookEvent("arena_round_start", Event_RoundActive);
@@ -108,20 +119,46 @@ public OnPluginStart()
 	HookEntityOutput("tf_logic_arena", "OnCapEnabled", Logic_OnCapEnabled);
 }
 
+public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], error_max)
+{
+	CreateNative("Resurrect_Enable", Native_Enable);
+	CreateNative("Resurrect_IsRunning", Native_IsRunning);
+	
+	RegPluginLibrary("resurrect");
+	
+	return APLRes_Success;
+}
+
+Resurrect_StripNotifyFlag(Handle:hCvar, bool:bStrip)
+{
+	new iFlags = GetConVarFlags(hCvar);
+	if(bStrip)
+	{
+		iFlags &= ~FCVAR_NOTIFY;
+	}else{
+		iFlags &= FCVAR_NOTIFY;
+	}
+	SetConVarFlags(hCvar, iFlags);
+}
+
 public OnPluginEnd()
 {
 	Entity_Cleanup();
 
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
-}
-
-public OnConfigsExecuted()
-{
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
+	// Fix the tf_arena_round_time cvar and notify the players
+	Resurrect_StripNotifyFlag(g_hCvarArenaRoundTime, false);
+	decl String:strValue[32];
+	GetConVarString(g_hCvarArenaRoundTime, strValue, sizeof(strValue));
+	for(new i=1; i<=MaxClients; i++)
+	{
+		if(IsClientInGame(i) && !IsFakeClient(i)) SendConVarValue(i, g_hCvarArenaRoundTime, strValue);
+	}
 }
 
 public OnMapStart()
 {
+	g_bEnabledForRound = false;
+
 	Entity_Cleanup();
 
 	decl String:strMap[64];
@@ -155,9 +192,30 @@ Resurrect_LoadResources()
 	for(new i=0; i<sizeof(g_strSoundMarked); i++) PrecacheSound(g_strSoundMarked[i]);
 }
 
-Resurrect_IsEnabled()
+bool:Resurrect_IsEnabled()
+{
+	return g_bEnabledForRound;
+}
+
+bool:Resurrect_CanBeEnabled()
 {
 	return g_bIsArena && GetConVarBool(g_hCvarEnabled);
+}
+
+Resurrect_RefreshCvars()
+{
+	for(new i=1; i<=MaxClients; i++)
+	{
+		if(IsClientInGame(i) && !IsFakeClient(i))
+		{
+			SendConVarValue(i, g_hCvarArenaRoundTime, "9001");
+		}
+	}
+}
+
+public OnClientPostAdminCheck(client)
+{
+	if(!IsFakeClient(client)) SendConVarValue(client, g_hCvarArenaRoundTime, "9001");
 }
 
 public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
@@ -166,12 +224,13 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 	PrintToServer("(Event_RoundStart)");
 #endif
 
-	if(!Resurrect_IsEnabled()) return;
+	g_bEnabledForRound = false;
+	if(!Resurrect_CanBeEnabled()) return;
+	g_bEnabledForRound = true;
 
 	Entity_Cleanup();
 	for(new i=0; i<sizeof(g_bPlayOnce); i++) g_bPlayOnce[i] = false;
-	
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true); // Keep the arena timer out of order until we need it for our timer
+	Resurrect_RefreshCvars();
 
 	// Disable the master control point so the game does not end when the player captures a control point
 	new iMaster = FindEntityByClassname(MaxClients+1, "team_control_point_master");
@@ -206,7 +265,8 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 
 		// Set the initial capturing time
 		// Respawn time will be reset when the player begins capturing so this isn't that important
-		Resurrect_SetCaptureTime(GetConVarFloat(g_hCvarTimeCapMax));
+		Resurrect_SetCaptureTime(TFTeam_Red, GetConVarFloat(g_hCvarCapMax));
+		Resurrect_SetCaptureTime(TFTeam_Blue, GetConVarFloat(g_hCvarCapMax));
 
 		HookSingleEntityOutput(iCaptureArea, "OnStartTeam1", Area_StartCapture, false);
 		HookSingleEntityOutput(iCaptureArea, "OnStartTeam2", Area_StartCapture, false);
@@ -316,7 +376,7 @@ public Area_StartCapture(const String:output[], caller, activator, Float:delay)
 	// Determine which team started capping by the name of the output
 	new iTeam = (strcmp(output, "OnStartTeam2") == 0) ? TFTeam_Blue : TFTeam_Red;
 
-	Resurrect_SetCaptureTime(Resurrect_GetCaptureTime(iTeam));
+	Resurrect_SetCaptureTime(iTeam, Resurrect_GetCaptureTime(iTeam));
 }
 
 Entity_GetObj()
@@ -339,10 +399,26 @@ Entity_GetObj()
 
 Entity_GetTimer()
 {
+	Resurrect_RefreshCvars();
+
 	if(g_iRefTimer != 0)
 	{
 		new iTimer = EntRefToEntIndex(g_iRefTimer);
 		if(iTimer > MaxClients) return iTimer;
+	}
+
+	// Catch the tf_arena_round_timer should it be alive and hide it from view
+	// We aren't going to disable it, just hide it so it should stalemate the round when time is up
+	new iRoundTimer = MaxClients+1;
+	while((iRoundTimer = FindEntityByClassname(iRoundTimer, "team_round_timer")) > MaxClients)
+	{
+		if(GetEntProp(iRoundTimer, Prop_Send, "m_bIsDisabled")) continue;
+
+		SetVariantInt(0);
+		AcceptEntityInput(iRoundTimer, "ShowInHUD");
+
+		SetVariantInt(0);
+		AcceptEntityInput(iRoundTimer, "AutoCountdown", iRoundTimer);
 	}
 
 	new iTimer = CreateEntityByName("team_round_timer");
@@ -369,9 +445,6 @@ Entity_GetTimer()
 
 		HookSingleEntityOutput(iTimer, "OnFinished", Timer_OnFinished, true);
 
-		// Enable this cvar to place the timer correctly in client's HUDs
-		SetConVarInt(g_hCvarArenaRoundTime, 9999, true, true);
-
 		return iTimer;
 	}
 
@@ -397,7 +470,6 @@ Timer_Cleanup()
 		}
 		g_iRefTimer = 0;
 	}
-
 }
 
 public Timer_OnFinished(const String:output[], caller, activator, Float:delay)
@@ -417,26 +489,66 @@ public Timer_OnFinished(const String:output[], caller, activator, Float:delay)
 	Timer_Cleanup();
 }
 
-Float:Resurrect_GetCaptureTime(iTeam)
+Float:Resurrect_GetCaptureTime(iTeam, iAlive1=-1, iAlive2=-1)
 {
+	// The general idea: the more players alive on the other team -> the quicker the control point can be captured
+	// and viceaversa: the more players alive on my team -> the slower the control point can be captured
+	new iOppositeTeam = (iTeam == TFTeam_Red) ? TFTeam_Blue : TFTeam_Red;
 	// The general idea: the more players dead on a team -> the quicker the control point can be captured
 
-	// Find the percentage of dead players on a team
-	new iSum, iNumDead;
-	for(new i=1; i<=MaxClients; i++)
+	// Find out how many more alive players the other team has
+	new iNumAlive[4];
+	if(iAlive1 != -1 && iAlive2 != -1)
 	{
-		if(IsClientInGame(i) && GetClientTeam(i) == iTeam)
+		iNumAlive[TFTeam_Red] = iAlive1;
+		iNumAlive[TFTeam_Blue] = iAlive2;
+	}else{
+		for(new i=1; i<=MaxClients; i++)
 		{
-			iSum++;
-			if(!IsPlayerAlive(i)) iNumDead++;
+			if(IsClientInGame(i))
+			{
+				new iClientTeam = GetClientTeam(i);
+				if(iClientTeam == TFTeam_Red || iClientTeam == TFTeam_Blue)
+				{
+					if(IsPlayerAlive(i)) iNumAlive[iClientTeam]++;
+				}
+			}
 		}
 	}
 
-	return GetConVarFloat(g_hCvarTimeCapMin) + GetConVarFloat(g_hCvarTimeCapMax) * (1.0 - float(iNumDead) / float(iSum));
+	new Float:flMin = GetConVarFloat(g_hCvarCapMin);
+	new Float:flMid = GetConVarFloat(g_hCvarCapMid);
+	new Float:flMax = GetConVarFloat(g_hCvarCapMax);
+
+	// Calculate the change for each player difference
+	// For now, use the interval between the min and max to calculate the modifier
+	new Float:flMult;
+	if(iNumAlive[iTeam] >= iNumAlive[iOppositeTeam])
+	{
+		// More players are alive on my team
+		flMult = flMax - flMid;
+	}else{
+		// More players are alive on the opposite team
+		flMult = flMid - flMin;
+	}
+
+	// Get a percentage to be able to use a modifier
+	new iPlayerCap = 10;
+	new iDiff = iNumAlive[iTeam] - iNumAlive[iOppositeTeam];
+	if(iDiff > iPlayerCap) iDiff = iPlayerCap; else if(iDiff < iPlayerCap * -1) iDiff = iPlayerCap * -1;
+
+	new Float:flRate = flMid + (float(iDiff) / float(iPlayerCap)) * flMult;
+
+	flRate = Pow(flRate, 1.1);
+	if(flRate > flMax) flRate = flMax; else if(flRate < flMin) flRate = flMin;
+
+	return flRate;
 }
 
-Resurrect_SetCaptureTime(Float:flCaptureTime)
+Resurrect_SetCaptureTime(iTeam, Float:flCaptureTime)
 {
+	if(iTeam != TFTeam_Red && iTeam != TFTeam_Blue) return;
+
 	// Applies a new capture rate for the control point
 	new iCaptureArea = EntRefToEntIndex(g_iRefCaptureArea);
 	if(iCaptureArea > MaxClients)
@@ -445,13 +557,21 @@ Resurrect_SetCaptureTime(Float:flCaptureTime)
 		if(iObjective > MaxClients)
 		{
 #if defined DEBUG
-			PrintToServer("(Resurrect_SetCaptureTime) Setting respawn to: %0.2f..", flCaptureTime);
+			PrintToServer("(Resurrect_SetCaptureTime) Setting respawn on team %d to: %0.2f..", iTeam, flCaptureTime);
 #endif
 			SetEntPropFloat(iCaptureArea, Prop_Data, "m_flCapTime", flCaptureTime);
 
 			// You need to do this in order for client's HUDs to predict the capture rate
-			SetEntPropFloat(iObjective, Prop_Data, "m_flTeamCapTime", flCaptureTime * 6.0, 0 + 8 * TFTeam_Red);
-			SetEntPropFloat(iObjective, Prop_Data, "m_flTeamCapTime", flCaptureTime * 6.0, 0 + 8 * TFTeam_Blue);
+
+			new iCPIndex = 0;
+			// Mappers have a little control given by the property "Number of RED/BLUE players to cap" on trigger_capture_area
+			new iReqCappers = GetEntProp(iObjective, Prop_Send, "m_iTeamReqCappers", _, iCPIndex + 8 * iTeam);
+			SetEntPropFloat(iObjective, Prop_Send, "m_flTeamCapTime", flCaptureTime * float(iReqCappers * 2), iCPIndex + 8 * iTeam);
+
+			// Tells the client to update the HUD
+			new iHudParity = GetEntProp(iObjective, Prop_Send, "m_iUpdateCapHudParity");
+			iHudParity = (iHudParity + 1) & CAPHUD_PARITY_MASK;
+			SetEntProp(iObjective, Prop_Send, "m_iUpdateCapHudParity", iHudParity);
 		}
 	}
 }
@@ -543,19 +663,25 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 	}
 
 	new iCount;
+	new iNumTeammates;
 	new Float:flTimeImmunity = GetConVarFloat(g_hCvarTimeImmunity);
 	for(new i=1; i<=MaxClients; i++)
 	{
-		if(IsClientInGame(i) && GetClientTeam(i) == iCappingTeam && !IsPlayerAlive(i))
+		if(IsClientInGame(i) && GetClientTeam(i) == iCappingTeam)
 		{
-			TF2_RespawnPlayer(i);
+			iNumTeammates++;
 
-			// Add immunity effects to the player being resurrected
-			TF2_AddCondition(i, TFCond_UberchargedCanteen, flTimeImmunity);
-			Particle_Attach(i, (iCappingTeam == TFTeam_Red) ? "hwn_cart_drips_red" : "hwn_cart_drips_blue", _, 50.0, flTimeImmunity);
-			Resurrect_VocalizeRevive(i);
+			if(!IsPlayerAlive(i))
+			{
+				TF2_RespawnPlayer(i);
 
-			iCount++;
+				// Add immunity effects to the player being resurrected
+				TF2_AddCondition(i, TFCond_UberchargedCanteen, flTimeImmunity);
+				Particle_Attach(i, (iCappingTeam == TFTeam_Red) ? "hwn_cart_drips_red" : "hwn_cart_drips_blue", _, 50.0, flTimeImmunity);
+				Resurrect_VocalizeRevive(i);
+
+				iCount++;
+			}
 		}
 	}
 
@@ -580,6 +706,7 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 	GetEventString(hEvent, "cappers", strCappers, sizeof(strCappers));
 
 	// Build a string of the list of cappers
+	new Float:flTimeHealthBonus = GetConVarFloat(g_hCvarHealthBonus);
 	new String:strChat[192];
 	new iLength = strlen(strCappers);
 	for(new i=0; i<iLength; i++)
@@ -588,6 +715,12 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 		if(client >= 1 && client <= MaxClients && IsClientInGame(client))
 		{
 			Format(strChat, sizeof(strChat), "%s%s%N, ", strChat, g_strTeamColors[GetClientTeam(client)], client);
+
+			// If there are no possible teammates to revive, give the player a small health bonus
+			if(iNumTeammates <= 1 && flTimeHealthBonus > 0.0)
+			{
+				TF2_AddCondition(client, TFCond_HalloweenQuickHeal, flTimeHealthBonus);
+			}
 		}
 	}
 
@@ -714,8 +847,6 @@ public Event_RoundWin(Handle:hEvent, const String:strEventName[], bool:bDontBroa
 	if(!Resurrect_IsEnabled()) return;
 	
 	Entity_Cleanup();
-
-	SetConVarInt(g_hCvarArenaRoundTime, 0, true, true);
 }
 
 Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[])
@@ -735,22 +866,61 @@ Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[
 	return -1;
 }
 
+stock Resurrect_DebugRespawnTimes()
+{
+	PrintToServer("Respawn times for RED based on alive players:\nMin: %0.2f ----> Mid: %0.2f ----> Max: %0.2f", GetConVarFloat(g_hCvarCapMin), GetConVarFloat(g_hCvarCapMid), GetConVarFloat(g_hCvarCapMax));
+
+	for(new i=1; i<=12; i++)
+	{
+		new iNumRed = i;
+		new iNumBlue = 13 - i;
+		PrintToServer("RED %2d BLUE %2d ] %0.2f", iNumRed, iNumBlue, Resurrect_GetCaptureTime(TFTeam_Red, iNumRed, iNumBlue));
+		if(i == 6)
+		{
+			iNumBlue = i;
+			PrintToServer("RED %2d BLUE %2d ] %0.2f", iNumRed, iNumBlue, Resurrect_GetCaptureTime(TFTeam_Red, iNumRed, iNumBlue));
+		}
+	}
+}
+
+public Native_Enable(Handle:plugin, numParams)
+{
+	SetConVarInt(g_hCvarEnabled, 1);
+	return 1;
+}
+
+public Native_IsRunning(Handle:plugin, numParams)
+{
+	return g_bEnabledForRound;
+}
+
 public Action:Command_Test(client, args)
 {
+	Resurrect_DebugRespawnTimes();
+
+	/*
 	// Prints out the value of CTFObjectiveResource::m_flTeamCapTime[64]
 	// Note to self: Take a look at m_bCPCapRateScalesWithPlayers on hardhat
-	/*
 	new iObj = FindEntityByClassname(MaxClients+1, "tf_objective_resource");
 	if(iObj > MaxClients)
 	{
+		PrintToServer("m_flTeamCapTime:");
 		for(new i=0; i<64; i++)
 		{
-			PrintToServer("%d = %0.2f", i, GetEntPropFloat(iObj, Prop_Data, "m_flTeamCapTime", i));
+			PrintToServer("%d = %0.2f", i, GetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", i));
+			//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 1.0, i);
 		}
 
-		PrintToServer("Obj = %d", iObj);
-		//SetEntPropFloat(activator, Prop_Data, "m_flCapTime", GetConVarFloat(g_hCvarTimeCapMin));
-		//SetEntPropFloat(iObj, Prop_Data, "m_flTeamCapTime", GetConVarFloat(g_hCvarTimeCapMin), 0);
+		//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 5.0, 0 + 8 * TFTeam_Red);
+		//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 5.0, 0 + 8 * TFTeam_Blue);
+
+		PrintToServer("m_iTeamReqCappers:");
+		for(new i=0; i<64; i++)
+		{
+			PrintToServer("%d = %d", i, GetEntProp(iObj, Prop_Send, "m_iTeamReqCappers", _, i));
+
+			//SetEntProp(iObj, Prop_Send, "m_bCPCapRateScalesWithPlayers", false, _, i);
+		}
 	}
 	*/
 
