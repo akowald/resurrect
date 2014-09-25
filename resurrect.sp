@@ -885,7 +885,7 @@ stock Resurrect_DebugRespawnTimes()
 
 public Native_Enable(Handle:plugin, numParams)
 {
-	SetConVarInt(g_hCvarEnabled, 1);
+	SetConVarBool(g_hCvarEnabled, bool:numParams);
 	return 1;
 }
 

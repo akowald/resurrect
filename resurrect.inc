@@ -3,17 +3,6 @@
 #endif
 #define _resurrect_included
 
-public SharedPlugin:__pl_resurrect = 
-{
-	name = "resurrect",
-	file = "resurrect.smx",
-#if defined REQUIRE_PLUGINS
-	required=1,
-#else
-	required=0,
-#endif
-};
-
 /*********************************************************
  * Enables or disables the mod. This will take effect when the round starts.
  * So when the map changes, this will be false until the first round begins.
@@ -29,3 +18,22 @@ native Resurrect_Enable(bool:bEnabled);
  * @return				True if running, false otherwise
  *********************************************************/
 native bool:Resurrect_IsRunning();
+
+public SharedPlugin:__pl_resurrect = 
+{
+	name = "resurrect",
+	file = "resurrect.smx",
+#if defined REQUIRE_PLUGIN
+	required=1,
+#else
+	required=0,
+#endif
+};
+
+#if !defined REQUIRE_PLUGIN
+public __pl_resurrect_SetNTVOptional()
+{
+	MarkNativeAsOptional("Resurrect_Enable");
+	MarkNativeAsOptional("Resurrect_IsRunning");
+}
+#endif
