@@ -885,7 +885,7 @@ stock Resurrect_DebugRespawnTimes()
 
 public Native_Enable(Handle:plugin, numParams)
 {
-	SetConVarBool(g_hCvarEnabled, bool:numParams);
+	SetConVarBool(g_hCvarEnabled, GetNativeCell(1));
 	return 1;
 }
 
