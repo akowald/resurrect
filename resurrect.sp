@@ -94,14 +94,14 @@ public OnPluginStart()
 	CreateConVar("resurrect_version", PLUGIN_VERSION, "Resurrection Version", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
 
 	g_hCvarEnabled = CreateConVar("resurrect_enabled", "1", "0/1 - Enable or disable the plugin.");
-	g_hCvarTimeUnlock = CreateConVar("resurrect_time_unlock", "25", "Seconds until the control point unlocks and players can cap.");
+	g_hCvarTimeUnlock = CreateConVar("resurrect_time_unlock", "15", "Seconds until the control point unlocks and players can cap.");
 	g_hCvarTimeMFD = CreateConVar("resurrect_time_mfd", "5.0", "Seconds after leaving a control point that mark for death effects remain on the player.");
 	g_hCvarTimeImmunity = CreateConVar("resurrect_time_immunity", "3.0", "Seconds of immunity after being resurrected.");
 	g_hCvarTimeTurtle = CreateConVar("resurrect_time_turtle", "81", "If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.");
 	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates.");
 
 	g_hCvarCapMin = CreateConVar("resurrect_cap_min", "0.25", "Minimum capture time when one team has fewer alive players.");
-	g_hCvarCapMid = CreateConVar("resurrect_cap_mid", "0.8", "Medium capture time when both teams have the same amount of alive players.");
+	g_hCvarCapMid = CreateConVar("resurrect_cap_mid", "0.7", "Medium capture time when both teams have the same amount of alive players.");
 	g_hCvarCapMax = CreateConVar("resurrect_cap_max", "2.0", "Maximum capture time when one team has more alive players.");
 
 	g_hCvarArenaRoundTime = FindConVar("tf_arena_round_time");
@@ -851,7 +851,6 @@ public Event_RoundWin(Handle:hEvent, const String:strEventName[], bool:bDontBroa
 
 Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[])
 {
-	// This only searches for entities above MaxClients (non-player/non-world entities)
 	decl String:strName[100];
 	new iEntity = -1;
 	while((iEntity = FindEntityByClassname(iEntity, strClassname)) != -1)
