@@ -25,5 +25,7 @@ resurrect_cap_max 2.0 // Maximum capture time when one team has more alive playe
 1. Install [SourceMod >= 1.6.2](http://www.sourcemod.net)
 2. Compile resurrect.sp and drop resurrect.smx into the `sourcemod/plugins/` directory.
 
+###[Changelog](https://github.com/akowald/resurrect/blob/master/CHANGELOG.md)
+
 ###License
 Released under GPLv3
