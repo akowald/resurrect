@@ -9,21 +9,34 @@ A simple mod for Arena mode. Capturing the control point will respawn your dead 
 
 ###CVars
 ```
-resurrect_enabled 1 // 0/1 - Enable or disable the plugin.");
-resurrect_time_unlock 15 // Seconds until the control point unlocks and players can cap.");
-resurrect_time_mfd 5.0 // Seconds after leaving a control point that mark for death effects remain on the player.");
-resurrect_time_immunity 3.0 // Seconds of immunity after being resurrected.");
-resurrect_time_turtle 81 // If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.");
-resurrect_health_bonus 4.0 // Seconds of health bonus when capturing with no teammates.");
+resurrect_enabled 1 // 0/1 - Enable or disable the plugin.
+resurrect_time_unlock 15 // Seconds until the control point unlocks and players can cap.
+resurrect_time_mfd 5.0 // Seconds after leaving a control point that mark for death effects remain on the player.
+resurrect_time_immunity 3.0 // Seconds of immunity after being resurrected.
+resurrect_time_turtle 81 // If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.
+resurrect_health_bonus 4.0 // Seconds of health bonus when capturing with no teammates.
+resurrect_vote_percentage 0.5 // Percentage of votes needed in order for a vote to pass.
+	
+resurrect_auto_start 1.5 // Minutes after a map starts to launch a vote to toggle resurrection mode.
+resurrect_auto_action 0 // 0 - do not start automatic votes | 1 - only start votes to turn ON | 2 - only start votes to turn OFF | 3 - both
+	
+resurrect_democracy_action 0 // 0 - do not allow players to vote | 1 - allow players to vote ON | 2 - allow players to vote OFF | 3 - allow both
+resurrect_democracy_treshold 0.3 // Percentage of players needed to type !res in order to start a vote.
+resurrect_democracy_cooldown 300 // Cooldown in seconds between voting to change resurrection mode.
+resurrect_democracy_minplayers 0 // Minimum players on the server in order for players to start a vote.
 
-resurrect_cap_min 0.25 // Minimum capture time when one team has fewer alive players.");
-resurrect_cap_mid 0.7 // Medium capture time when both teams have the same amount of alive players.");
-resurrect_cap_max 2.0 // Maximum capture time when one team has more alive players.");
+resurrect_cap_min 0.25 // Minimum capture time when one team has fewer alive players.
+resurrect_cap_mid 0.7 // Medium capture time when both teams have the same amount of alive players.
+resurrect_cap_max 2.0 // Maximum capture time when one team has more alive players.
 ```
+
+###Commands
+
 
 ###Install
 1. Install [SourceMod >= 1.6.2](http://www.sourcemod.net)
-2. Compile resurrect.sp and drop resurrect.smx into the `sourcemod/plugins/` directory.
+2. Compile `resurrect.sp` and drop `resurrect.smx` into the `sourcemod/plugins/` directory.
+3. Drop `resurrect.phrases.txt` into the `sourcemod/translations` directory. 
 
 ###[Changelog](https://github.com/akowald/resurrect/blob/master/CHANGELOG.md)
 

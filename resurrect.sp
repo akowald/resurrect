@@ -27,7 +27,8 @@
 #include <tf2_stocks>
 
 //#define DEBUG
-#define PLUGIN_VERSION "0.3"
+#define PLUGIN_VERSION "0.4"
+#define PLUGIN_PREFIX					"\x07F0E68CRes>\x01"
 
 #define SOUND_REVIVE					"mvm/mvm_revive.wav"
 #define SOUND_WARN 						"misc/doomsday_lift_warning.wav"
@@ -35,6 +36,13 @@
 
 #define CAPHUD_PARITY_BITS				6
 #define CAPHUD_PARITY_MASK				((1<<CAPHUD_PARITY_BITS)-1)
+
+#define TIMER_STARTED_AUTO 				0
+#define TIMER_STARTED_NOMINATED 		1
+
+#define ArenaRoundState_RoundRunning 	7
+#define TFTeam_Red						2
+#define TFTeam_Blue						3
 
 new const String:g_strReviveDemo[][] = {"vo/demoman_mvm_resurrect01.wav", "vo/demoman_mvm_resurrect02.wav", "vo/demoman_mvm_resurrect03.wav", "vo/demoman_mvm_resurrect05.wav", "vo/demoman_mvm_resurrect06.wav", "vo/demoman_mvm_resurrect07.wav", "vo/demoman_mvm_resurrect08.wav", "vo/demoman_mvm_resurrect09.wav", "vo/demoman_mvm_resurrect10.wav", "vo/demoman_mvm_resurrect11.wav"};
 new const String:g_strReviveEngie[][] = {"vo/engineer_mvm_resurrect01.wav", "vo/engineer_mvm_resurrect02.wav", "vo/engineer_mvm_resurrect03.wav"};
@@ -49,17 +57,16 @@ new const String:g_strSoundMarked[][] = {"weapons/samurai/tf_marked_for_death_im
 
 new const String:g_strTeamColors[][] = {"\x07B2B2B2", "\x07B2B2B2", "\x07FF4040", "\x0799CCFF"};
 
-#define ArenaRoundState_RoundRunning 	7
-#define TFTeam_Red						2
-#define TFTeam_Blue						3
-
 new bool:g_bIsArena;
 new bool:g_bEnabledForRound = false;
+new bool:g_bPlayOnce[MAXPLAYERS+1];
+new Handle:g_hTimerVote;
+new bool:g_bDemocracy[MAXPLAYERS+1];
 
 new g_iRefCaptureArea;
 new g_iRefObj;
 new g_iRefTimer;
-new bool:g_bPlayOnce[MAXPLAYERS+1];
+new g_iRefControlPoint;
 
 new Handle:g_hCvarEnabled;
 new Handle:g_hCvarTimeUnlock;
@@ -70,15 +77,34 @@ new Handle:g_hCvarCapMid;
 new Handle:g_hCvarCapMin;
 new Handle:g_hCvarCapMax;
 new Handle:g_hCvarHealthBonus;
+new Handle:g_hCvarVotePercent;
+new Handle:g_hCvarAutoStart;
+new Handle:g_hCvarAutoAction;
+new Handle:g_hCvarDemoAction;
+new Handle:g_hCvarDemoCooldown;
+new Handle:g_hCvarDemoTreshold;
+new Handle:g_hCvarDemoMinPlayers;
 
 new Handle:g_hCvarArenaRoundTime;
 
 enum eMapHack
 {
 	MapHack_None=0,
-	MapHack_HardHat
+	MapHack_HardHat,
+	MapHack_Arakawa,
+	MapHack_BlackwoodValley
 };
 new eMapHack:g_nMapHack;
+
+enum eActionState
+{
+	Action_VoteNone=0,
+	Action_VoteOn,
+	Action_VoteOff,
+	Action_VoteBoth
+};
+
+#include "resurrect_menus.sp"
 
 public Plugin:myinfo = 
 {
@@ -99,6 +125,15 @@ public OnPluginStart()
 	g_hCvarTimeImmunity = CreateConVar("resurrect_time_immunity", "3.0", "Seconds of immunity after being resurrected.");
 	g_hCvarTimeTurtle = CreateConVar("resurrect_time_turtle", "81", "If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.");
 	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates.");
+	g_hCvarVotePercent = CreateConVar("resurrect_vote_percentage", "0.5", "Percentage of votes needed in order for a vote to pass.", _, true, 0.0, true, 1.0);
+	
+	g_hCvarAutoStart = CreateConVar("resurrect_auto_start", "2.0", "Minutes after a map starts to launch a vote to toggle resurrection mode.");
+	g_hCvarAutoAction = CreateConVar("resurrect_auto_action", "0", "0 - do not start automatic votes | 1 - only start votes to turn ON | 2 - only start votes to turn OFF | 3 - both");
+	
+	g_hCvarDemoAction = CreateConVar("resurrect_democracy_action", "0", "0 - do not allow players to vote | 1 - allow players to vote ON | 2 - allow players to vote OFF | 3 - allow both");
+	g_hCvarDemoTreshold = CreateConVar("resurrect_democracy_treshold", "0.3", "Percentage of players needed to type !res in order to start a vote.");
+	g_hCvarDemoCooldown = CreateConVar("resurrect_democracy_cooldown", "300", "Cooldown in seconds between voting to change resurrection mode.");
+	g_hCvarDemoMinPlayers = CreateConVar("resurrect_democracy_minplayers", "3", "Minimum players on the server in order for players to start a vote.");
 
 	g_hCvarCapMin = CreateConVar("resurrect_cap_min", "0.25", "Minimum capture time when one team has fewer alive players.");
 	g_hCvarCapMid = CreateConVar("resurrect_cap_mid", "0.7", "Medium capture time when both teams have the same amount of alive players.");
@@ -108,6 +143,8 @@ public OnPluginStart()
 
 	Resurrect_StripNotifyFlag(g_hCvarArenaRoundTime, true);
 
+	HookConVarChange(g_hCvarEnabled, CVarChanged_Enabled);
+
 	HookEvent("teamplay_round_start", Event_RoundStart);
 	HookEvent("arena_round_start", Event_RoundActive);
 	HookEvent("teamplay_point_captured", Event_PointCaptured);
@@ -115,8 +152,33 @@ public OnPluginStart()
 	HookEvent("teamplay_round_win", Event_RoundWin);
 
 	RegAdminCmd("resurrect_test", Command_Test, ADMFLAG_ROOT);
+	RegAdminCmd("resurrect_toggle", Command_Toggle, ADMFLAG_GENERIC);
+	RegAdminCmd("resurrect_vote", Command_Vote, ADMFLAG_VOTE);
 
 	HookEntityOutput("tf_logic_arena", "OnCapEnabled", Logic_OnCapEnabled);
+
+	LoadTranslations("resurrect.phrases");
+}
+
+public OnAllPluginsLoaded()
+{
+	AdminMenu_Init();
+}
+
+public OnLibraryAdded(const String:name[])
+{
+	if(strcmp(name, LIBRARY_ADMINMENU))
+	{
+		AdminMenu_Init();
+	}
+}
+
+public OnLibraryRemoved(const String:name[])
+{
+	if(strcmp(name, LIBRARY_ADMINMENU) == 0)
+	{
+		g_hAdminMenu = INVALID_HANDLE;
+	}
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], error_max)
@@ -158,6 +220,8 @@ public OnPluginEnd()
 public OnMapStart()
 {
 	g_bEnabledForRound = false;
+	g_bVoteInProgress = false;
+	for(new i=0; i<MAXPLAYERS+1; i++) 
 
 	Entity_Cleanup();
 
@@ -169,9 +233,54 @@ public OnMapStart()
 	if(strncmp(strMap, "arena_hardhat", 13) == 0)
 	{
 		g_nMapHack = MapHack_HardHat;
+	}else if(strncmp(strMap, "arena_arakawa", 13) == 0)
+	{
+		g_nMapHack = MapHack_Arakawa;
+	}else if(strcmp(strMap, "arena_blackwood_valley") == 0)
+	{
+		g_nMapHack = MapHack_BlackwoodValley;
 	}
 
 	Resurrect_LoadResources();
+}
+
+public OnMapEnd()
+{
+	Timer_KillVote();
+}
+
+public OnConfigsExecuted()
+{
+	Timer_KillVote();
+
+	if(g_bIsArena)
+	{
+		new bool:bStartTimer = false;
+		switch(eActionState:GetConVarInt(g_hCvarAutoAction))
+		{
+			case Action_VoteOn:
+			{
+				if(!GetConVarBool(g_hCvarEnabled))
+				{
+					bStartTimer = true;
+				}
+			}
+			case Action_VoteOff:
+			{
+				if(GetConVarBool(g_hCvarEnabled))
+				{
+					bStartTimer = true;
+				}
+			}
+			case Action_VoteBoth: bStartTimer = true;
+		}
+
+		if(bStartTimer)
+		{
+			new Float:flDuration = GetConVarFloat(g_hCvarAutoStart);
+			if(flDuration > 0.0) g_hTimerVote = CreateTimer(flDuration * 60.0, Timer_StartVote, TIMER_STARTED_AUTO, TIMER_REPEAT);
+		}
+	}
 }
 
 Resurrect_LoadResources()
@@ -179,6 +288,10 @@ Resurrect_LoadResources()
 	PrecacheSound(SOUND_REVIVE);
 	PrecacheSound(SOUND_WARN);
 	PrecacheSound(SOUND_MARKED);
+
+	PrecacheSound(SOUND_VOTE_STARTED);
+	PrecacheSound(SOUND_VOTE_PASSED);
+	PrecacheSound(SOUND_VOTE_FAILED);
 
 	for(new i=0; i<sizeof(g_strReviveDemo); i++) PrecacheSound(g_strReviveDemo[i]);
 	for(new i=0; i<sizeof(g_strReviveEngie); i++) PrecacheSound(g_strReviveEngie[i]);
@@ -218,6 +331,11 @@ public OnClientPostAdminCheck(client)
 	if(!IsFakeClient(client)) SendConVarValue(client, g_hCvarArenaRoundTime, "9001");
 }
 
+public OnClientDisconnect(client)
+{
+	g_bDemocracy[client] = false;
+}
+
 public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
 {
 #if defined DEBUG
@@ -247,6 +365,12 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 	if(iObjective <= MaxClients)
 	{
 		LogMessage("Failed to find \"tf_objective_resource\" entity!");
+
+		new iNumControlPoints = GetEntProp(iObjective, Prop_Send, "m_iNumControlPoints");
+		if(iNumControlPoints != 1)
+		{
+			LogMessage("Found %d control points, this could mean trouble!", iNumControlPoints);
+		}
 	}
 
 	// Find the trigger_capture_area which controls capping time
@@ -263,6 +387,15 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 #endif
 		g_iRefCaptureArea = EntIndexToEntRef(iCaptureArea);
 
+		new iControlPoint = Entity_FindEntityByName(strName, "team_control_point");
+		if(iControlPoint > MaxClients)
+		{
+#if defined DEBUG
+			PrintToServer("(Event_RoundStart) Found team_control_point: %d!", iControlPoint);
+#endif
+			g_iRefControlPoint = EntIndexToEntRef(iControlPoint);
+		}
+
 		// Set the initial capturing time
 		// Respawn time will be reset when the player begins capturing so this isn't that important
 		Resurrect_SetCaptureTime(TFTeam_Red, GetConVarFloat(g_hCvarCapMax));
@@ -272,8 +405,9 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 		HookSingleEntityOutput(iCaptureArea, "OnStartTeam2", Area_StartCapture, false);
 
 		// Hook touch 
+		SDKHook(iCaptureArea, SDKHook_Touch, Area_Touch);
 		SDKHook(iCaptureArea, SDKHook_StartTouch, Area_StartTouch);
-		SDKHook(iCaptureArea, SDKHook_EndTouch, Area_EndTouch);
+		//SDKHook(iCaptureArea, SDKHook_EndTouch, Area_EndTouch);
 	}
 
 	// Find tf_logic_arena and allow us to dynamically set when capture points are unlocked
@@ -290,40 +424,75 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 		}
 	}
 
-	PrintToChatAll("\x07F0E68CCapturing the control point will respawn your teammates!");
+	PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Chat_Description", LANG_SERVER, "\x07F0E68C");
+}
+
+public Action:Area_Touch(iCaptureArea, client)
+{
+	//PrintToServer("(Area_Touch) client: %d!", client);
+
+	// Only apply marked for death effects while they are defending the control point
+	if(client >= 1 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client))
+	{
+		// Check if they own the control point they are standing on
+		new iControlPoint = EntRefToEntIndex(g_iRefControlPoint);
+		if(iControlPoint > MaxClients && GetEntProp(iControlPoint, Prop_Send, "m_iTeamNum") == GetClientTeam(client))
+		{
+			if(!TF2_IsPlayerInCondition(client, TFCond_MarkedForDeathSilent))
+			{
+				// They are touching the point and not marked yet (they probably just captured)
+				Resurrect_HandleMarkedEffects(client);
+			}
+
+			TF2_AddCondition(client, TFCond_MarkedForDeathSilent, GetConVarFloat(g_hCvarTimeMFD));
+		}
+
+	}
+
+	return Plugin_Continue;
 }
 
 public Area_StartTouch(iCaptureArea, client)
 {
 	//PrintToServer("(Area_StartTouch) client: %d!", client);
 
-	// Touching the capture area should give you permanent mark for death until you leave the area
+	// Play a sound to let the player know they might be marked for death
 	if(client >= 1 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client))
 	{
-		TF2_AddCondition(client, TFCond_MarkedForDeathSilent, TFCondDuration_Infinite);
-
-		// Play the long 4.0s marked sound only the first time the player becomes marked for death to get the idea across
-		if(!g_bPlayOnce[client])
+		// Check if they own the control point they are standing on
+		new iControlPoint = EntRefToEntIndex(g_iRefControlPoint);
+		if(iControlPoint > MaxClients && GetEntProp(iControlPoint, Prop_Send, "m_iTeamNum") == GetClientTeam(client))
 		{
-			EmitSoundToClient(client, SOUND_MARKED);
-			g_bPlayOnce[client] = true;
-		}else{
-			// This is a shorter 'punch' impact sound
-			EmitSoundToClient(client, g_strSoundMarked[GetRandomInt(0, sizeof(g_strSoundMarked)-1)], _, _, _, _, 1.0);
+			Resurrect_HandleMarkedEffects(client);
 		}
+	}
+}
+
+Resurrect_HandleMarkedEffects(client)
+{
+	// Play the long 4.0s marked sound only the first time the player becomes marked for death to get the idea across
+	if(!g_bPlayOnce[client])
+	{
+		EmitSoundToClient(client, SOUND_MARKED);
+		g_bPlayOnce[client] = true;
+	}else{
+		// This is a shorter 'punch' impact sound
+		EmitSoundToClient(client, g_strSoundMarked[GetRandomInt(0, sizeof(g_strSoundMarked)-1)], _, _, _, _, 1.0);
 	}
 }
 
 public Area_EndTouch(iCaptureArea, client)
 {
-	//PrintToServer("(Area_EndTouch) client: %d!", client);
+	PrintToServer("(Area_EndTouch) client: %d!", client);
 
 	// Player has left the capture area so remove their marked for death effects but give them a constant amount of time left
+	/*
 	if(client >= 1 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client))
 	{
 		TF2_RemoveCondition(client, TFCond_MarkedForDeathSilent);
 		TF2_AddCondition(client, TFCond_MarkedForDeathSilent, GetConVarFloat(g_hCvarTimeMFD));
 	}
+	*/
 }
 
 public Logic_OnCapEnabled(const String:output[], caller, activator, Float:delay)
@@ -339,7 +508,7 @@ public Logic_OnCapEnabled(const String:output[], caller, activator, Float:delay)
 	if(hAnno != INVALID_HANDLE)
 	{
 		decl String:strText[100];
-		Format(strText, sizeof(strText), "Cap the point to bring back your teammates");
+		Format(strText, sizeof(strText), "%T", "Res_Anno_PointUnlocked", LANG_SERVER);
 
 		// Display a message at the control point making players aware of the objective
 		new Float:flPos[3];
@@ -594,7 +763,7 @@ public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontB
 			if(iEntity > MaxClients)
 			{
 #if defined DEBUG
-				PrintToServer("(RoundStart) Removing entity \"door_any_trackdoor_1_prop\"!");
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_trackdoor_1_prop\"!");
 #endif
 				AcceptEntityInput(iEntity, "Kill");
 			}
@@ -603,7 +772,7 @@ public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontB
 			if(iEntity > MaxClients)
 			{
 #if defined DEBUG
-				PrintToServer("(RoundStart) Removing entity \"door_any_trackdoor_2_prop\"!");
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_trackdoor_2_prop\"!");
 #endif
 				AcceptEntityInput(iEntity, "Kill");
 			}
@@ -612,7 +781,7 @@ public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontB
 			if(iEntity > MaxClients)
 			{
 #if defined DEBUG
-				PrintToServer("(RoundStart) Removing entity \"door_any_trackdoor_1\"!");
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_trackdoor_1\"!");
 #endif
 				AcceptEntityInput(iEntity, "Kill");
 			}
@@ -621,9 +790,57 @@ public Event_RoundActive(Handle:hEvent, const String:strEventName[], bool:bDontB
 			if(iEntity > MaxClients)
 			{
 #if defined DEBUG
-				PrintToServer("(RoundStart) Removing entity \"door_any_trackdoor_2\"!");
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_trackdoor_2\"!");
 #endif
 				AcceptEntityInput(iEntity, "Kill");
+			}
+		}
+		case MapHack_Arakawa:
+		{
+			// Remove the spawn door props when the round starts
+			new iEntity;
+			while((iEntity = Entity_FindEntityByName("door_any_large_dyn_1", "func_door")) != -1)
+			{
+#if defined DEBUG
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_large_dyn_1\"!");
+#endif
+				AcceptEntityInput(iEntity, "Kill");
+			}
+
+			while((iEntity = Entity_FindEntityByName("door_any_large_dyn_1_prop", "prop_dynamic")) != -1)
+			{
+#if defined DEBUG
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_large_dyn_1_prop\"!");
+#endif
+				AcceptEntityInput(iEntity, "Kill");
+			}
+
+			while((iEntity = Entity_FindEntityByName("door_any_large_dyn_2", "func_door")) != -1)
+			{
+#if defined DEBUG
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_large_dyn_2\"!");
+#endif
+				AcceptEntityInput(iEntity, "Kill");
+			}
+
+			while((iEntity = Entity_FindEntityByName("door_any_large_dyn_2_prop", "prop_dynamic")) != -1)
+			{
+#if defined DEBUG
+				PrintToServer("(Event_RoundActive) Removing entity \"door_any_large_dyn_2_prop\"!");
+#endif
+				AcceptEntityInput(iEntity, "Kill");
+			}
+		}
+		case MapHack_BlackwoodValley:
+		{
+			// Rename the logic_relay to disable the explosion when the point is captured
+			new iEntity = Entity_FindEntityByName("end_pit_destroy_relay", "logic_relay");
+			if(iEntity != -1)
+			{
+#if defined DEBUG
+				PrintToServer("(Event_RoundActive) Found: \"end_pit_destroy_relay_res\"!");
+#endif
+				DispatchKeyValue(iEntity, "targetname", "end_pit_destroy_relay_res");
 			}
 		}
 	}
@@ -709,12 +926,20 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 	new Float:flTimeHealthBonus = GetConVarFloat(g_hCvarHealthBonus);
 	new String:strChat[192];
 	new iLength = strlen(strCappers);
+	new bool:bOnce = false;
 	for(new i=0; i<iLength; i++)
 	{
 		new client = strCappers[i];
 		if(client >= 1 && client <= MaxClients && IsClientInGame(client))
 		{
-			Format(strChat, sizeof(strChat), "%s%s%N, ", strChat, g_strTeamColors[GetClientTeam(client)], client);
+			if(!bOnce)
+			{
+				// All cappers should be on the same team
+				Format(strChat, sizeof(strChat), "%s %s", PLUGIN_PREFIX, g_strTeamColors[GetClientTeam(client)]);
+				bOnce = true;
+			}
+
+			Format(strChat, sizeof(strChat), "%s%N, ", strChat, client);
 
 			// If there are no possible teammates to revive, give the player a small health bonus
 			if(iNumTeammates <= 1 && flTimeHealthBonus > 0.0)
@@ -731,7 +956,7 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 		strChat[iLength-2] = '\0';
 	}
 
-	Format(strChat, sizeof(strChat), "%s\x01 saved \x07CF7336%d", strChat, iCount);
+	Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived", LANG_SERVER, "\x07CF7336", iCount);
 	PrintToChatAll(strChat);
 }
 
@@ -847,6 +1072,19 @@ public Event_RoundWin(Handle:hEvent, const String:strEventName[], bool:bDontBroa
 	if(!Resurrect_IsEnabled()) return;
 	
 	Entity_Cleanup();
+
+	if(g_nMapHack == MapHack_BlackwoodValley)
+	{
+		// Trigger the map explosion manually when the round is over
+		new iRelay = Entity_FindEntityByName("end_pit_destroy_relay_res", "logic_relay");
+		if(iRelay != -1)
+		{
+#if defined DEBUG
+			PrintToServer("(Event_RoundWin) Calling Trigger on \"end_pit_destroy_relay_res\"!");
+#endif
+			AcceptEntityInput(iRelay, "Trigger");
+		}
+	}
 }
 
 Entity_FindEntityByName(const String:strTargetName[], const String:strClassname[])
@@ -899,7 +1137,6 @@ public Action:Command_Test(client, args)
 
 	/*
 	// Prints out the value of CTFObjectiveResource::m_flTeamCapTime[64]
-	// Note to self: Take a look at m_bCPCapRateScalesWithPlayers on hardhat
 	new iObj = FindEntityByClassname(MaxClients+1, "tf_objective_resource");
 	if(iObj > MaxClients)
 	{
@@ -924,4 +1161,177 @@ public Action:Command_Test(client, args)
 	*/
 
 	return Plugin_Handled;
+}
+
+public Action:Command_Toggle(client, args)
+{
+	// This command basically sets the cvar resurrect_enabled
+	// No parameters will toggle the value
+	// resurrect_toggle 0 or resurrect_toggle 1 sets the value of the cvar
+
+	new bool:bNewValue;
+	if(GetConVarBool(g_hCvarEnabled))
+	{
+		bNewValue = false;
+	}else{
+		bNewValue = true;
+	}
+
+	if(args == 1)
+	{
+		decl String:strArg[15];
+		GetCmdArg(1, strArg, sizeof(strArg));
+		if(strcmp(strArg, "0") == 0)
+		{
+			bNewValue = false;
+		}else{
+			bNewValue = true;
+		}
+	}
+
+	decl String:strState[16];
+	if(bNewValue)
+	{
+		Format(strState, sizeof(strState), "%T", "Res_Vote_On", LANG_SERVER);
+		SetConVarBool(g_hCvarEnabled, bNewValue);
+	}else{
+		Format(strState, sizeof(strState), "%T", "Res_Vote_Off", LANG_SERVER);
+		SetConVarBool(g_hCvarEnabled, bNewValue);
+	}
+
+	ShowActivity2(client, PLUGIN_PREFIX, " %N set Resurrection Mode: %s", client, strState);
+	ReplyToCommand(client, "Changes will take effect next round.");
+
+	return Plugin_Handled;
+}
+
+public Action:Command_Vote(client, args)
+{
+	// This command will try to start a vote to toggle the current resurrection mode
+	Vote_Create(client);
+
+	return Plugin_Handled;
+}
+
+Timer_KillVote()
+{
+	if(g_hTimerVote != INVALID_HANDLE)
+	{
+		KillTimer(g_hTimerVote);
+		g_hTimerVote = INVALID_HANDLE;
+	}
+}
+
+public Action:Timer_StartVote(Handle:hTimer, any:iSource)
+{
+	g_hTimerVote = INVALID_HANDLE;
+
+	// Automatically start a vote to toggle resurrection mode
+	if(!Vote_Create())
+	{
+		// Failed to start a vote so try again later
+		g_hTimerVote = CreateTimer(5.0, Timer_StartVote, _, TIMER_REPEAT);
+	}else{
+		decl String:strState[32];
+		if(GetConVarBool(g_hCvarEnabled))
+		{
+			Format(strState, sizeof(strState), "%T", "Res_Vote_Off", LANG_SERVER);
+		}else{
+			Format(strState, sizeof(strState), "%T", "Res_Vote_On", LANG_SERVER);
+		}
+
+		if(iSource == TIMER_STARTED_AUTO)
+		{
+			PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Vote_Automatic", LANG_SERVER, 0x04, strState, 0x01);
+		}else{
+			PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_RTV_Started", LANG_SERVER, 0x04, strState, 0x01);	
+		}
+	}
+	
+	return Plugin_Stop;
+}
+
+public OnClientSayCommand_Post(client, const String:command[], const String:sArgs[])
+{
+	// Allow normal players to vote to start a resurrection toggle vote
+	//PrintToServer("client: %N command: \"%s\" sArgs: \"%s\"", client, command, sArgs);
+
+	if(!g_bIsArena) return;
+	if(client <= 0 || client > MaxClients || !IsClientInGame(client) || GetClientTeam(client) < 2) return;
+
+	if(strcmp(sArgs, "res", false) != 0 && strcmp(sArgs, "!res", false) != 0) return;
+
+	new eActionState:state = eActionState:GetConVarInt(g_hCvarDemoAction);
+	// Players are not allowed to start votes or a resurrection vote is already in progress
+	if(state == Action_VoteNone || g_bVoteInProgress || g_hTimerVote != INVALID_HANDLE)
+	{
+		PrintToChat(client, "%s %T", PLUGIN_PREFIX, "Res_RTV_Disabled", LANG_SERVER);
+		return;
+	}
+
+	// Players are not allowed to change the current resurrection state
+	if((state == Action_VoteOn && GetConVarBool(g_hCvarEnabled) || (state == Action_VoteOff && !GetConVarBool(g_hCvarEnabled))))
+	{
+		PrintToChat(client, "%s %T", PLUGIN_PREFIX, "Res_RTV_Disabled", LANG_SERVER);
+		return;		
+	}
+
+	// Too little time has passed since the last resurrection vote
+	new iWaitTime = GetConVarInt(g_hCvarDemoCooldown) - (GetTime() - g_iTimeLastVote);
+	if(g_iTimeLastVote != 0 && iWaitTime > 0)
+	{
+		PrintToChat(client, "%s %T", PLUGIN_PREFIX, "Res_RTV_Cooldown", LANG_SERVER, 0x04, iWaitTime, 0x01);
+		return;
+	}
+
+	// Check if there's enough people on the server in order to start a vote
+	new iPlayersNeeded = GetConVarInt(g_hCvarDemoMinPlayers) - GetPlayerCount();
+	if(iPlayersNeeded > 0)
+	{
+		PrintToChat(client, "%s %T", PLUGIN_PREFIX, "Res_RTV_MinPlayers", LANG_SERVER, 0x04, iPlayersNeeded, 0x01);
+		return;
+	}
+
+	new bool:bFirstTime = false;
+	if(!g_bDemocracy[client])
+	{
+		bFirstTime = true;
+	}
+
+	g_bDemocracy[client] = true;
+
+	// Check to see if we've reached the treshold
+	new iNumVotes;
+	for(new i=0; i<MAXPLAYERS+1; i++) if(g_bDemocracy[i]) iNumVotes++;
+	new iNumVotesNeeded = RoundToCeil(float(GetPlayerCount()) * GetConVarFloat(g_hCvarDemoTreshold));
+	if(iNumVotesNeeded < 1) iNumVotesNeeded = 1;
+
+	if(bFirstTime)
+	{
+		decl String:strState[32];
+		if(GetConVarBool(g_hCvarEnabled))
+		{
+			Format(strState, sizeof(strState), "%T", "Res_Vote_Off", LANG_SERVER);
+		}else{
+			Format(strState, sizeof(strState), "%T", "Res_Vote_On", LANG_SERVER);
+		}
+
+		PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_RTV_Nominated", LANG_SERVER, g_strTeamColors[GetClientTeam(client)], client, 0x01, strState, iNumVotes, iNumVotesNeeded);
+	}
+
+	if(iNumVotes >= iNumVotesNeeded)
+	{
+		Timer_KillVote();
+		g_hTimerVote = CreateTimer(0.0, Timer_StartVote, TIMER_STARTED_NOMINATED, TIMER_REPEAT);
+	}
+}
+
+GetPlayerCount()
+{
+	new iCount;
+	for(new i=1; i<=MaxClients; i++)
+	{
+		if(IsClientInGame(i) && GetClientTeam(i) >= 2 && !IsFakeClient(i)) iCount++;
+	}
+	return iCount;
 }

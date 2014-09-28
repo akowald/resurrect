@@ -1,0 +1,111 @@
+"Phrases"
+{
+	"Res_Chat_Description"
+	{
+		"#format"		"{1:s}"
+		"en"			"Capturing the control point will respawn your teammates!"
+	}
+	"Res_Anno_PointUnlocked"
+	{
+		"en"			"Cap the point to bring back your teammates"
+	}
+	"Res_Chat_Revived"
+	{
+		"#format"		"{1:s},{2:d}"
+		"en"			"saved {1}{2}"
+	}
+	"Res_Vote_InProgress"
+	{
+		"en"			"Failed to start vote: Vote is already in progress."
+	}
+	"Res_Vote_Title"
+	{
+		"#format"		"{1:s}"
+		"en"			"Should Resurrection Mode be: {1}"
+	}
+	"Res_Vote_On"
+	{
+		"en"			"On"
+	}
+	"Res_Vote_Off"
+	{
+		"en"			"Off"
+	}
+	"Res_Vote_Yes"
+	{
+		"en"			"Sure"
+	}
+	"Res_Vote_No"
+	{
+		"en"			"No way"
+	}
+	"Res_Vote_Cancelled_Changed"
+	{
+		"#format"		"{1:s}"
+		"en"			"Resurrection Mode manually changed to {1}"
+	}
+	"Res_Vote_Cancelled"
+	{
+		"#format"		"{1:s},{2:c}"
+		"en"			"Vote {1}failed{2}: Vote was cancelled."
+	}
+	"Res_Chat_VoteStarted"
+	{
+		"#format"		"{1:s},{2:N},{3:c},{4:c},{5:s},{6:c}"
+		"en"			"{1}{2}{3} wants to turn {4}Resurrection Mode {5}{6}"
+	}
+	"Res_Chat_VotePassed"
+	{
+		"#format"		"{1:c},{2:c},{3:c},{4:d},{5:c},{6:d}"
+		"en"			"Vote {1}passed{2}: with {3}{4}%%{5} (needed {6}%%)"
+	}
+	"Res_Chat_Passed_Yes"
+	{
+		"#format"		"{1:c},{2:c}"
+		"en"			"Resurrection Mode will be {1}enabled{2} next round!"
+	}
+	"Res_Chat_Passed_No"
+	{
+		"#format"		"{1:s},{2:c}"
+		"en"			"Resurrection Mode will be {1}disabled{2} next round!"
+	}	
+	"Res_Chat_VoteFailed"
+	{
+		"#format"		"{1:s},{2:c},{3:s},{4:d},{5:c},{6:d}"
+		"en"			"Vote {1}failed{2}: with {3}{4}%%{5} (needed {6}%%)"
+	}
+	"Res_Admin_Toggle"
+	{
+		"#format"		"{1:s}"
+		"en"			"Turn Resurrection Mode: {1}"
+	}
+	"Res_Vote_Automatic"
+	{
+		"#format"		"{1:c},{2:s},{3:c}"
+		"en"			"Automatic vote started: {1}Resurrection Mode {2}{3}"
+	}
+	"Res_RTV_Disabled"
+	{
+		"en"			"You cannot do that at this time."
+	}
+	"Res_RTV_Cooldown"
+	{
+		"#format"		"{1:c},{2:d},{3:c}"
+		"en"			"Wait {1}{2}{3} more second(s)."
+	}
+	"Res_RTV_Started"
+	{
+		"#format"		"{1:c},{2:s},{3:c}"
+		"en"			"Vote nominated: {1}Resurrection Mode {2}{3}"
+	}
+	"Res_RTV_MinPlayers"
+	{
+		"#format"		"{1:c},{2:d},{3:c}"
+		"en"			"Wait for {1}{2}{3} more player(s)."
+	}
+	"Res_RTV_Nominated"
+	{
+		"#format"		"{1:s},{2:N},{3:c},{4:s},{5:d},{6:d}"
+		"en"			"{1}{2}{3} wants {4} vote ({5}/{6} needed)"
+	}
+}
