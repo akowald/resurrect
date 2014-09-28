@@ -31,7 +31,10 @@ resurrect_cap_max 2.0 // Maximum capture time when one team has more alive playe
 ```
 
 ###Commands
-
+| Name          | Admin flag    | Description                                                                      |
+| ------------- |---------------:|----------------------------------------------------------------------------------|
+| resurrect_toggle | generic b |Toggles the state of the mod. Use arguements 1 or 0 to set the state of the mod.   |
+| resurrect_vote   | vote k    | Starts a vote to toggle resurrection mod if possible.                             |
 
 ###Install
 1. Install [SourceMod >= 1.6.2](http://www.sourcemod.net)
