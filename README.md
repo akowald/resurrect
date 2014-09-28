@@ -8,8 +8,8 @@ Resurrection - Arena mod for Team Fortress 2
 A simple mod for Arena mode. Capturing the control point will respawn your dead teammates instead of ending the round. The capture rate is increased when the opposite team has more alive players. Players take a penalty for standing on the control point. A team wins by eliminating the enemy team or by holding the control point for a period of time.
 
 ###Features
-+ Automatic votes when a map begins to enable resurrection mod...
-+ Player nominated votes activated by typing ```res``` into chat.
++ Automatic votes when a map begins to enable resurrection mod.
++ Player nominated votes activated by typing ```res``` in chat.
 
 ###CVars
 ```
