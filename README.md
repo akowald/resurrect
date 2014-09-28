@@ -27,7 +27,7 @@ resurrect_auto_action 0 // 0 - do not start automatic votes | 1 - only start vot
 resurrect_democracy_action 0 // 0 - do not allow players to vote | 1 - allow players to vote ON | 2 - allow players to vote OFF | 3 - allow both
 resurrect_democracy_treshold 0.3 // Percentage of players needed to type !res in order to start a vote.
 resurrect_democracy_cooldown 300 // Cooldown in seconds between voting to change resurrection mode.
-resurrect_democracy_minplayers 0 // Minimum players on the server in order for players to start a vote.
+resurrect_democracy_minplayers 3 // Minimum players on the server in order for players to start a vote.
 
 resurrect_cap_min 0.25 // Minimum capture time when one team has fewer alive players.
 resurrect_cap_mid 0.7 // Medium capture time when both teams have the same amount of alive players.
