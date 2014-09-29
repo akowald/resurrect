@@ -8,11 +8,11 @@ Features:
 + Added admin menu integration to the above commands for ease of use.
 + Added automatic votes after a map begins to change the state of the mod.
 + Added nominated votes players may start by typing `res` into chat to change the state of the mod.
-+ Added the translation file `resurrect.phrases.txt`
++ Added the translation file `resurrect.phrases.txt`.
 
 Bug fixes:
 
-+ Added map fixes for **arena_brakawa** and **arena_blackwoodvalley**
++ Added map fixes for **arena_brakawa** and **arena_blackwoodvalley**.
 
 Changes:
 
