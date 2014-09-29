@@ -11,6 +11,7 @@ Features:
 + Added the translation file `resurrect.phrases.txt`
 
 Bug fixes:
+
 + Added map fixes for **arena_brakawa** and **arena_blackwoodvalley**
 
 Changes:
