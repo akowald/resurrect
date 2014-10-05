@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5 (2014-10-05)
+
+Features:
+
++ Added a way to toggle TF2's first blood crits by player count with the cvar `resurrect_firstblood`. Default value of `-1` leaves it alone.
++ Added last rites: If you are the last player alive and make a kill when the other team has `resurrect_lastrites` more players, you receive minicrits for `resurrect_lastrites_duration`.
++ Added announcer lines for the last player standing and the last player to die.
+
 ## 0.4 (2014-09-28)
 
 Features:

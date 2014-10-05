@@ -7,7 +7,7 @@
 	}
 	"Res_Anno_PointUnlocked"
 	{
-		"en"			"Cap the point to bring back your teammates"
+		"en"			"Capture to respawn teammates"
 	}
 	"Res_Chat_Revived"
 	{
@@ -107,5 +107,15 @@
 	{
 		"#format"		"{1:s},{2:N},{3:c},{4:s},{5:d},{6:d}"
 		"en"			"{1}{2}{3} wants {4} vote ({5}/{6} needed)"
+	}
+	"Res_Chat_LastRites"
+	{
+		"#format"		"{1:s},{2:N},{3:c},{4:s},{5:c}"
+		"en"			"{1}{2}{3} activated {4}last rites{5}"
+	}
+	"Res_Chat_FirstBlood"
+	{
+		"#format"		"{1:c},{2:d},{3:c},{4:c},{5:c}"
+		"en"			"Reached {1}{2}{3} players: {4}enabled first blood{5}"
 	}
 }

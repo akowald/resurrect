@@ -27,12 +27,13 @@
 #include <tf2_stocks>
 
 //#define DEBUG
-#define PLUGIN_VERSION "0.4"
+#define PLUGIN_VERSION 					"0.5"
 #define PLUGIN_PREFIX					"\x07F0E68CRes>\x01"
 
 #define SOUND_REVIVE					"mvm/mvm_revive.wav"
 #define SOUND_WARN 						"misc/doomsday_lift_warning.wav"
 #define SOUND_MARKED 					"weapons/samurai/tf_marked_for_death_indicator.wav"
+#define SOUND_LAST_RITES 				"misc/killstreak.wav"
 
 #define CAPHUD_PARITY_BITS				6
 #define CAPHUD_PARITY_MASK				((1<<CAPHUD_PARITY_BITS)-1)
@@ -55,6 +56,9 @@ new const String:g_strReviveSpy[][] = {"vo/spy_mvm_resurrect01.wav", "vo/spy_mvm
 new const String:g_strRevivePyro[][] = {"vo/pyro_sf13_spell_generic01.wav", "vo/pyro_autocappedcontrolpoint01.wav"};
 new const String:g_strSoundMarked[][] = {"weapons/samurai/tf_marked_for_death_impact_01.wav", "weapons/samurai/tf_marked_for_death_impact_02.wav", "weapons/samurai/tf_marked_for_death_impact_03.wav"};
 
+new const String:g_strSoundLastMan[][] = {"vo/announcer_am_lastmanalive01.wav", "vo/announcer_am_lastmanalive02.wav", "vo/announcer_am_lastmanalive03.wav", "vo/announcer_am_lastmanalive04.wav"};
+new const String:g_strSoundForfeit[][] = {"vo/announcer_am_lastmanforfeit01.wav", "vo/announcer_am_lastmanforfeit02.wav", "vo/announcer_am_lastmanforfeit03.wav", "vo/announcer_am_lastmanforfeit04.wav"};
+
 new const String:g_strTeamColors[][] = {"\x07B2B2B2", "\x07B2B2B2", "\x07FF4040", "\x0799CCFF"};
 
 new bool:g_bIsArena;
@@ -62,6 +66,7 @@ new bool:g_bEnabledForRound = false;
 new bool:g_bPlayOnce[MAXPLAYERS+1];
 new Handle:g_hTimerVote;
 new bool:g_bDemocracy[MAXPLAYERS+1];
+new bool:g_bPlayAnnouncer;
 
 new g_iRefCaptureArea;
 new g_iRefObj;
@@ -84,8 +89,13 @@ new Handle:g_hCvarDemoAction;
 new Handle:g_hCvarDemoCooldown;
 new Handle:g_hCvarDemoTreshold;
 new Handle:g_hCvarDemoMinPlayers;
+new Handle:g_hCvarAnnouncer;
+new Handle:g_hCvarLastRites;
+new Handle:g_hCvarLastRitesDuration;
+new Handle:g_hCvarFirstBlood;
 
 new Handle:g_hCvarArenaRoundTime;
+new Handle:g_hCvarArenaFirstBlood;
 
 enum eMapHack
 {
@@ -124,9 +134,13 @@ public OnPluginStart()
 	g_hCvarTimeMFD = CreateConVar("resurrect_time_mfd", "5.0", "Seconds after leaving a control point that mark for death effects remain on the player.");
 	g_hCvarTimeImmunity = CreateConVar("resurrect_time_immunity", "3.0", "Seconds of immunity after being resurrected.");
 	g_hCvarTimeTurtle = CreateConVar("resurrect_time_turtle", "81", "If a control point is held for this many seconds, the game ends. This prevents camping and turtling by C/D spies or engineers.");
-	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates.");
+	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates. Set to 0.0 to disable.");
 	g_hCvarVotePercent = CreateConVar("resurrect_vote_percentage", "0.5", "Percentage of votes needed in order for a vote to pass.", _, true, 0.0, true, 1.0);
-	
+	g_hCvarAnnouncer = CreateConVar("resurrect_announcer", "0", "Number of players required when the round starts to play 'last man standing' or 'disappointment' announcer sounds. Set to a high number (64) to disable.");
+	g_hCvarLastRites = CreateConVar("resurrect_lastrites", "3", "Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.");
+	g_hCvarLastRitesDuration = CreateConVar("resurrect_lastrites_duration", "5.0", "Seconds of minicrits awarded for the last rite effect.");
+	g_hCvarFirstBlood = CreateConVar("resurrect_firstblood", "-1", "Number of players required for first blood. -1 will do nothing.");
+
 	g_hCvarAutoStart = CreateConVar("resurrect_auto_start", "2.0", "Minutes after a map starts to launch a vote to toggle resurrection mode.");
 	g_hCvarAutoAction = CreateConVar("resurrect_auto_action", "0", "0 - do not start automatic votes | 1 - only start votes to turn ON | 2 - only start votes to turn OFF | 3 - both");
 	
@@ -140,6 +154,7 @@ public OnPluginStart()
 	g_hCvarCapMax = CreateConVar("resurrect_cap_max", "2.0", "Maximum capture time when one team has more alive players.");
 
 	g_hCvarArenaRoundTime = FindConVar("tf_arena_round_time");
+	g_hCvarArenaFirstBlood = FindConVar("tf_arena_first_blood");
 
 	Resurrect_StripNotifyFlag(g_hCvarArenaRoundTime, true);
 
@@ -150,6 +165,7 @@ public OnPluginStart()
 	HookEvent("teamplay_point_captured", Event_PointCaptured);
 	HookEvent("server_cvar", Event_Cvar, EventHookMode_Pre);
 	HookEvent("teamplay_round_win", Event_RoundWin);
+	HookEvent("player_death", Event_PlayerDeath);
 
 	RegAdminCmd("resurrect_test", Command_Test, ADMFLAG_ROOT);
 	RegAdminCmd("resurrect_toggle", Command_Toggle, ADMFLAG_GENERIC);
@@ -288,6 +304,7 @@ Resurrect_LoadResources()
 	PrecacheSound(SOUND_REVIVE);
 	PrecacheSound(SOUND_WARN);
 	PrecacheSound(SOUND_MARKED);
+	PrecacheSound(SOUND_LAST_RITES);
 
 	PrecacheSound(SOUND_VOTE_STARTED);
 	PrecacheSound(SOUND_VOTE_PASSED);
@@ -303,6 +320,9 @@ Resurrect_LoadResources()
 	for(new i=0; i<sizeof(g_strReviveSpy); i++) PrecacheSound(g_strReviveSpy[i]);
 	for(new i=0; i<sizeof(g_strRevivePyro); i++) PrecacheSound(g_strRevivePyro[i]);
 	for(new i=0; i<sizeof(g_strSoundMarked); i++) PrecacheSound(g_strSoundMarked[i]);
+
+	for(new i=0; i<sizeof(g_strSoundLastMan); i++) PrecacheSound(g_strSoundLastMan[i]);
+	for(new i=0; i<sizeof(g_strSoundForfeit); i++) PrecacheSound(g_strSoundForfeit[i]);
 }
 
 bool:Resurrect_IsEnabled()
@@ -349,6 +369,29 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 	Entity_Cleanup();
 	for(new i=0; i<sizeof(g_bPlayOnce); i++) g_bPlayOnce[i] = false;
 	Resurrect_RefreshCvars();
+
+	// Determine whether or not to play 'last man standing' or 'disappoint' announcer lines for the next round
+	g_bPlayAnnouncer = false;
+	new iPlayerCount;
+	for(new i=1; i<=MaxClients; i++)
+	{
+		if(IsClientInGame(i) && GetClientTeam(i) >= 2) iPlayerCount++;
+	}
+	if(iPlayerCount >= GetConVarInt(g_hCvarAnnouncer)) g_bPlayAnnouncer = true;
+
+	// Determine whether or not to enable first blood crits
+	new iNumFirstBlood = GetConVarInt(g_hCvarFirstBlood);
+	if(iNumFirstBlood > 0)
+	{
+		if(iPlayerCount >= iNumFirstBlood)
+		{
+			SetConVarInt(g_hCvarArenaFirstBlood, 1);
+
+			PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Chat_FirstBlood", LANG_SERVER, 0x04, iNumFirstBlood, 0x01, 0x04, 0x01);
+		}else{
+			SetConVarInt(g_hCvarArenaFirstBlood, 0);
+		}
+	}
 
 	// Disable the master control point so the game does not end when the player captures a control point
 	new iMaster = FindEntityByClassname(MaxClients+1, "team_control_point_master");
@@ -424,7 +467,7 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 		}
 	}
 
-	PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Chat_Description", LANG_SERVER, "\x07F0E68C");
+	PrintToChatAll("%s \x0732CD32%T", PLUGIN_PREFIX, "Res_Chat_Description", LANG_SERVER, "\x07F0E68C");
 }
 
 public Action:Area_Touch(iCaptureArea, client)
@@ -481,20 +524,6 @@ Resurrect_HandleMarkedEffects(client)
 	}
 }
 
-public Area_EndTouch(iCaptureArea, client)
-{
-	PrintToServer("(Area_EndTouch) client: %d!", client);
-
-	// Player has left the capture area so remove their marked for death effects but give them a constant amount of time left
-	/*
-	if(client >= 1 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client))
-	{
-		TF2_RemoveCondition(client, TFCond_MarkedForDeathSilent);
-		TF2_AddCondition(client, TFCond_MarkedForDeathSilent, GetConVarFloat(g_hCvarTimeMFD));
-	}
-	*/
-}
-
 public Logic_OnCapEnabled(const String:output[], caller, activator, Float:delay)
 {
 #if defined DEBUG
@@ -502,7 +531,7 @@ public Logic_OnCapEnabled(const String:output[], caller, activator, Float:delay)
 #endif
 
 	if(!Resurrect_IsEnabled()) return;
-	if(!Resurrect_IsInRound()) return;	
+	if(!Resurrect_IsInRound()) return;
 
 	new Handle:hAnno = CreateEvent("show_annotation");
 	if(hAnno != INVALID_HANDLE)
@@ -1061,7 +1090,7 @@ public Event_Cvar(Handle:hEvent, const String:strEventName[], bool:bDontBroadcas
 	// Block the notification that this cvar has changed
 	decl String:strCvar[30];
 	GetEventString(hEvent, "cvarname", strCvar, sizeof(strCvar));
-	if(strcmp(strCvar, "tf_arena_round_time") == 0)
+	if(strcmp(strCvar, "tf_arena_round_time") == 0 || strcmp(strCvar, "tf_arena_first_blood") == 0)
 	{
 		SetEventBroadcast(hEvent, true);
 	}
@@ -1134,31 +1163,6 @@ public Native_IsRunning(Handle:plugin, numParams)
 public Action:Command_Test(client, args)
 {
 	Resurrect_DebugRespawnTimes();
-
-	/*
-	// Prints out the value of CTFObjectiveResource::m_flTeamCapTime[64]
-	new iObj = FindEntityByClassname(MaxClients+1, "tf_objective_resource");
-	if(iObj > MaxClients)
-	{
-		PrintToServer("m_flTeamCapTime:");
-		for(new i=0; i<64; i++)
-		{
-			PrintToServer("%d = %0.2f", i, GetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", i));
-			//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 1.0, i);
-		}
-
-		//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 5.0, 0 + 8 * TFTeam_Red);
-		//SetEntPropFloat(iObj, Prop_Send, "m_flTeamCapTime", 5.0, 0 + 8 * TFTeam_Blue);
-
-		PrintToServer("m_iTeamReqCappers:");
-		for(new i=0; i<64; i++)
-		{
-			PrintToServer("%d = %d", i, GetEntProp(iObj, Prop_Send, "m_iTeamReqCappers", _, i));
-
-			//SetEntProp(iObj, Prop_Send, "m_bCPCapRateScalesWithPlayers", false, _, i);
-		}
-	}
-	*/
 
 	return Plugin_Handled;
 }
@@ -1334,4 +1338,75 @@ GetPlayerCount()
 		if(IsClientInGame(i) && GetClientTeam(i) >= 2 && !IsFakeClient(i)) iCount++;
 	}
 	return iCount;
+}
+
+public Event_PlayerDeath(Handle:hEvent, const String:strEventName[], bool:bDontBroadcast)
+{
+#if defined DEBUG
+	PrintToServer("(Event_PlayerDeath)");
+#endif
+	if(!Resurrect_IsEnabled()) return;
+	if(!Resurrect_IsInRound()) return;
+
+	if(GetEventInt(hEvent, "death_flags") & TF_DEATHFLAG_DEADRINGER) return;
+
+	// Play a 'last man standing' sound to the victim's team if his team has just a single player left
+	new iVictim = GetClientOfUserId(GetEventInt(hEvent, "userid"));
+	if(iVictim >= 1 && iVictim <= MaxClients && IsClientInGame(iVictim))
+	{
+		new iTeam = GetClientTeam(iVictim);
+		if(iTeam == TFTeam_Red || iTeam == TFTeam_Blue)
+		{
+			new iOppositeTeam = (iTeam == TFTeam_Red) ? TFTeam_Blue : TFTeam_Red;
+			new iNumLeftVictim = -1;
+			for(new i=1; i<=MaxClients; i++) if(IsClientInGame(i) && GetClientTeam(i) == iTeam && IsPlayerAlive(i)) iNumLeftVictim++;
+			new iNumLeftAttacker;
+			for(new i=1; i<=MaxClients; i++) if(IsClientInGame(i) && GetClientTeam(i) == iOppositeTeam && IsPlayerAlive(i)) iNumLeftAttacker++;
+
+			if(g_bPlayAnnouncer)
+			{
+				if(iNumLeftVictim == 1)
+				{
+					// Only play the 'You are the last one alive' announcer type messages to the team with 1 player to avoid confusion
+					for(new i=1; i<=MaxClients; i++)
+					{
+						if(IsClientInGame(i) && GetClientTeam(i) != iOppositeTeam)
+						{
+							EmitSoundToClient(i, g_strSoundLastMan[GetRandomInt(0, sizeof(g_strSoundLastMan)-1)]);
+						}
+					}
+				}else if(iNumLeftVictim == 0)
+				{
+					// The victim was the last person alive, delay this a little bit to avoid clutter, the flawless defeat line seems to still clip
+					CreateTimer(7.5, Timer_Forfeit, GetClientUserId(iVictim), TIMER_FLAG_NO_MAPCHANGE);
+				}
+			}
+
+			//PrintToServer("iNumLeftVictim: %d\niNumLeftAttacker: %d", iNumLeftVictim, iNumLeftAttacker);
+
+			// Activate last rites if the last player kills a player with a team that has resurrect_lastrites more players
+			if(iNumLeftAttacker == 1 && iNumLeftVictim - iNumLeftAttacker >= GetConVarFloat(g_hCvarLastRites))
+			{
+				new iAttacker = GetClientOfUserId(GetEventInt(hEvent, "attacker"));
+				if(iAttacker >= 1 && iAttacker <= MaxClients && IsClientInGame(iAttacker) && IsPlayerAlive(iAttacker))
+				{
+					PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Chat_LastRites", LANG_SERVER, g_strTeamColors[GetClientTeam(iAttacker)], iAttacker, 0x01, "\x07EF4293", 0x01);
+					
+					TF2_AddCondition(iAttacker, TFCond_Buffed, GetConVarFloat(g_hCvarLastRitesDuration));
+					EmitSoundToAll(SOUND_LAST_RITES);
+				}
+			}
+		}
+	}
+}
+
+public Action:Timer_Forfeit(Handle:hTimer, any:iUserId)
+{
+	new client = GetClientOfUserId(iUserId);
+	if(client >= 1 && client <= MaxClients && IsClientInGame(client))
+	{
+		EmitSoundToClient(client, g_strSoundForfeit[GetRandomInt(0, sizeof(g_strSoundForfeit)-1)]);
+	}
+
+	return Plugin_Handled;
 }
