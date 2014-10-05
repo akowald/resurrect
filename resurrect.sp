@@ -137,7 +137,7 @@ public OnPluginStart()
 	g_hCvarHealthBonus = CreateConVar("resurrect_health_bonus", "4.0", "Seconds of health bonus when capturing with no teammates. Set to 0.0 to disable.");
 	g_hCvarVotePercent = CreateConVar("resurrect_vote_percentage", "0.5", "Percentage of votes needed in order for a vote to pass.", _, true, 0.0, true, 1.0);
 	g_hCvarAnnouncer = CreateConVar("resurrect_announcer", "0", "Number of players required when the round starts to play 'last man standing' or 'disappointment' announcer sounds. Set to a high number (64) to disable.");
-	g_hCvarLastRites = CreateConVar("resurrect_lastrites", "3", "Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.");
+	g_hCvarLastRites = CreateConVar("resurrect_lastrites", "2", "Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.");
 	g_hCvarLastRitesDuration = CreateConVar("resurrect_lastrites_duration", "5.0", "Seconds of minicrits awarded for the last rite effect.");
 	g_hCvarFirstBlood = CreateConVar("resurrect_firstblood", "-1", "Number of players required for first blood. -1 will do nothing.");
 

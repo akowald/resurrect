@@ -21,7 +21,7 @@ resurrect_time_turtle 81 // If a control point is held for this many seconds, th
 resurrect_health_bonus 4.0 // Seconds of health bonus when capturing with no teammates.
 resurrect_vote_percentage 0.5 // Percentage of votes needed in order for a vote to pass.
 resurrect_announcer 0 // Number of players required when the round starts to play 'last man standing' or 'disappointment' announcer sounds. Set to a high number (64) to disable.
-resurrect_lastrites 3 // Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.
+resurrect_lastrites 2 // Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.
 resurrect_lastrites_duration 5.0 // Seconds of minicrits awarded for the last rite effect.
 resurrect_firstblood -1 // Number of players required for first blood. -1 will do nothing.
 
