@@ -24,6 +24,7 @@ resurrect_announcer 0 // Number of players required when the round starts to pla
 resurrect_lastrites 2 // Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.
 resurrect_lastrites_duration 5.0 // Seconds of minicrits awarded for the last rite effect.
 resurrect_firstblood -1 // Number of players required for first blood. -1 will do nothing.
+resurrect_maphack 1 // 0/1 - Enable or disable changes to the map to support resurrection mode.
 
 resurrect_auto_start 1.5 // Minutes after a map starts to launch a vote to toggle resurrection mode.
 resurrect_auto_action 0 // 0 - do not start automatic votes | 1 - only start votes to turn ON | 2 - only start votes to turn OFF | 3 - both

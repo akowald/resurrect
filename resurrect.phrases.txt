@@ -14,6 +14,11 @@
 		"#format"		"{1:s},{2:d}"
 		"en"			"saved {1}{2}"
 	}
+	"Res_Chat_Revived_EntireTeam"
+	{
+		"#format"		"{1:s},{2:c}"
+		"en"			"saved {1}the entire team{2}!"
+	}
 	"Res_Vote_InProgress"
 	{
 		"en"			"Failed to start vote: Vote is already in progress."

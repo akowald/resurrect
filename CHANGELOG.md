@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6 (2014-10-19)
+
+Features:
+
++ Added acknowledgement when entire team was revived.
++ Added cvar `resurrect_maphack` to enable or disable map fixes.
+
+Bug fixes:
+
++ Added map fixes for **arena_ferrous**.
+
 ## 0.5 (2014-10-05)
 
 Features:

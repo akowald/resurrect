@@ -19,6 +19,9 @@
  */
 
  // Do NOT compile this file alone. Compile resurrect.sp instead.
+#if !defined RES_MAIN_PLUGIN
+#error This plugin must be compiled from resurrect.sp
+#endif
 
 #include <sourcemod>
 

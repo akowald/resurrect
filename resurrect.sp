@@ -19,6 +19,7 @@
  */
 
 #pragma semicolon 1
+#define RES_MAIN_PLUGIN
 
 #include <sourcemod>
 #include <sdktools>
@@ -27,13 +28,14 @@
 #include <tf2_stocks>
 
 //#define DEBUG
-#define PLUGIN_VERSION 					"0.5"
+#define PLUGIN_VERSION 					"0.6"
 #define PLUGIN_PREFIX					"\x07F0E68CRes>\x01"
 
 #define SOUND_REVIVE					"mvm/mvm_revive.wav"
 #define SOUND_WARN 						"misc/doomsday_lift_warning.wav"
 #define SOUND_MARKED 					"weapons/samurai/tf_marked_for_death_indicator.wav"
 #define SOUND_LAST_RITES 				"misc/killstreak.wav"
+#define SOUND_REVIVED_ALL 				"ui/itemcrate_smash_ultrarare_short.wav"
 
 #define CAPHUD_PARITY_BITS				6
 #define CAPHUD_PARITY_MASK				((1<<CAPHUD_PARITY_BITS)-1)
@@ -93,6 +95,7 @@ new Handle:g_hCvarAnnouncer;
 new Handle:g_hCvarLastRites;
 new Handle:g_hCvarLastRitesDuration;
 new Handle:g_hCvarFirstBlood;
+new Handle:g_hCvarMapHack;
 
 new Handle:g_hCvarArenaRoundTime;
 new Handle:g_hCvarArenaFirstBlood;
@@ -102,7 +105,8 @@ enum eMapHack
 	MapHack_None=0,
 	MapHack_HardHat,
 	MapHack_Arakawa,
-	MapHack_BlackwoodValley
+	MapHack_BlackwoodValley,
+	MapHack_Ferrous
 };
 new eMapHack:g_nMapHack;
 
@@ -140,6 +144,7 @@ public OnPluginStart()
 	g_hCvarLastRites = CreateConVar("resurrect_lastrites", "2", "Number of MORE players on the opposite team to activate last rites. Set to a high number (64) to disable last rites.");
 	g_hCvarLastRitesDuration = CreateConVar("resurrect_lastrites_duration", "5.0", "Seconds of minicrits awarded for the last rite effect.");
 	g_hCvarFirstBlood = CreateConVar("resurrect_firstblood", "-1", "Number of players required for first blood. -1 will do nothing.");
+	g_hCvarMapHack = CreateConVar("resurrect_maphack", "1", "0/1 - Enable or disable changes to the map to support resurrection mode.");
 
 	g_hCvarAutoStart = CreateConVar("resurrect_auto_start", "2.0", "Minutes after a map starts to launch a vote to toggle resurrection mode.");
 	g_hCvarAutoAction = CreateConVar("resurrect_auto_action", "0", "0 - do not start automatic votes | 1 - only start votes to turn ON | 2 - only start votes to turn OFF | 3 - both");
@@ -159,6 +164,7 @@ public OnPluginStart()
 	Resurrect_StripNotifyFlag(g_hCvarArenaRoundTime, true);
 
 	HookConVarChange(g_hCvarEnabled, CVarChanged_Enabled);
+	HookConVarChange(g_hCvarMapHack, CVarChanged_MapHack);
 
 	HookEvent("teamplay_round_start", Event_RoundStart);
 	HookEvent("arena_round_start", Event_RoundActive);
@@ -245,19 +251,31 @@ public OnMapStart()
 	GetCurrentMap(strMap, sizeof(strMap));
 	g_bIsArena = (strncmp(strMap, "arena_", 6) == 0);
 
-	g_nMapHack = MapHack_None;
-	if(strncmp(strMap, "arena_hardhat", 13) == 0)
-	{
-		g_nMapHack = MapHack_HardHat;
-	}else if(strncmp(strMap, "arena_arakawa", 13) == 0)
-	{
-		g_nMapHack = MapHack_Arakawa;
-	}else if(strcmp(strMap, "arena_blackwood_valley") == 0)
-	{
-		g_nMapHack = MapHack_BlackwoodValley;
-	}
-
 	Resurrect_LoadResources();
+}
+
+MapHack_Init()
+{
+	g_nMapHack = MapHack_None;
+
+	decl String:strMap[64];
+	GetCurrentMap(strMap, sizeof(strMap));
+	if(GetConVarBool(g_hCvarMapHack))
+	{
+		if(strncmp(strMap, "arena_hardhat", 13) == 0)
+		{
+			g_nMapHack = MapHack_HardHat;
+		}else if(strncmp(strMap, "arena_arakawa", 13) == 0)
+		{
+			g_nMapHack = MapHack_Arakawa;
+		}else if(strcmp(strMap, "arena_blackwood_valley") == 0)
+		{
+			g_nMapHack = MapHack_BlackwoodValley;
+		}else if(strncmp(strMap, "arena_ferrous", 13) == 0)
+		{
+			g_nMapHack = MapHack_Ferrous;
+		}
+	}	
 }
 
 public OnMapEnd()
@@ -267,6 +285,8 @@ public OnMapEnd()
 
 public OnConfigsExecuted()
 {
+	MapHack_Init();
+
 	Timer_KillVote();
 
 	if(g_bIsArena)
@@ -305,6 +325,7 @@ Resurrect_LoadResources()
 	PrecacheSound(SOUND_WARN);
 	PrecacheSound(SOUND_MARKED);
 	PrecacheSound(SOUND_LAST_RITES);
+	PrecacheSound(SOUND_REVIVED_ALL);
 
 	PrecacheSound(SOUND_VOTE_STARTED);
 	PrecacheSound(SOUND_VOTE_PASSED);
@@ -463,6 +484,8 @@ public Event_RoundStart(Handle:hEvent, const String:strEventName[], bool:bDontBr
 #if defined DEBUG
 			PrintToServer("(Event_RoundStart) Found tf_logic_arena: %d!", iLogic);
 #endif
+			if(g_nMapHack == MapHack_Ferrous) iTimeUnlock = 40; // Map starts the train moving 40s after OnArenaRoundStart
+
 			SetEntPropFloat(iLogic, Prop_Data, "m_flTimeToEnableCapPoint", float(iTimeUnlock));
 		}
 	}
@@ -940,7 +963,13 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 			new iTeam = GetClientTeam(i);
 			if(iTeam == iCappingTeam)
 			{
-				EmitSoundToClient(i, SOUND_REVIVE);
+				if(iCount >= iNumTeammates-1 && iCount >= 3)
+				{
+					// Play a special sound when a player revives the entire team
+					EmitSoundToClient(i, SOUND_REVIVED_ALL);
+				}else{
+					EmitSoundToClient(i, SOUND_REVIVE);
+				}
 			}else if(iTeam == iOppositeTeam)
 			{
 				EmitSoundToClient(i, SOUND_WARN);
@@ -985,7 +1014,13 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 		strChat[iLength-2] = '\0';
 	}
 
-	Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived", LANG_SERVER, "\x07CF7336", iCount);
+	if(iCount >= iNumTeammates-1)
+	{
+		// Player revived the entire team
+		Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived_EntireTeam", LANG_SERVER, "\x07FFD700", 0x01);
+	}else{
+		Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived", LANG_SERVER, "\x07CF7336", iCount);
+	}
 	PrintToChatAll(strChat);
 }
 
@@ -1409,4 +1444,9 @@ public Action:Timer_Forfeit(Handle:hTimer, any:iUserId)
 	}
 
 	return Plugin_Handled;
+}
+
+public CVarChanged_MapHack(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	MapHack_Init();
 }
