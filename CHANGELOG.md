@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7 (2015-3-12)
+
+Bug fixes:
+
++ Fixed broken sounds from latest update.
+
 ## 0.6 (2014-10-19)
 
 Features:
