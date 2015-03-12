@@ -28,7 +28,7 @@
 #include <tf2_stocks>
 
 //#define DEBUG
-#define PLUGIN_VERSION 					"0.6"
+#define PLUGIN_VERSION 					"0.7"
 #define PLUGIN_PREFIX					"\x07F0E68CRes>\x01"
 
 #define SOUND_REVIVE					"mvm/mvm_revive.wav"
@@ -47,19 +47,19 @@
 #define TFTeam_Red						2
 #define TFTeam_Blue						3
 
-new const String:g_strReviveDemo[][] = {"vo/demoman_mvm_resurrect01.wav", "vo/demoman_mvm_resurrect02.wav", "vo/demoman_mvm_resurrect03.wav", "vo/demoman_mvm_resurrect05.wav", "vo/demoman_mvm_resurrect06.wav", "vo/demoman_mvm_resurrect07.wav", "vo/demoman_mvm_resurrect08.wav", "vo/demoman_mvm_resurrect09.wav", "vo/demoman_mvm_resurrect10.wav", "vo/demoman_mvm_resurrect11.wav"};
-new const String:g_strReviveEngie[][] = {"vo/engineer_mvm_resurrect01.wav", "vo/engineer_mvm_resurrect02.wav", "vo/engineer_mvm_resurrect03.wav"};
-new const String:g_strReviveHeavy[][] = {"vo/heavy_mvm_resurrect01.wav", "vo/heavy_mvm_resurrect02.wav", "vo/heavy_mvm_resurrect04.wav", "vo/heavy_mvm_resurrect05.wav", "vo/heavy_mvm_resurrect06.wav", "vo/heavy_mvm_resurrect07.wav"};
-new const String:g_strReviveMedic[][] = {"vo/medic_mvm_resurrect01.wav", "vo/medic_mvm_resurrect02.wav", "vo/medic_mvm_resurrect03.wav"};
-new const String:g_strReviveScout[][] = {"vo/scout_mvm_resurrect01.wav", "vo/scout_mvm_resurrect02.wav", "vo/scout_mvm_resurrect03.wav", "vo/scout_mvm_resurrect04.wav", "vo/scout_mvm_resurrect05.wav", "vo/scout_mvm_resurrect06.wav", "vo/scout_mvm_resurrect07.wav", "vo/scout_mvm_resurrect08.wav"};
-new const String:g_strReviveSniper[][] = {"vo/sniper_mvm_resurrect01.wav", "vo/sniper_mvm_resurrect02.wav", "vo/sniper_mvm_resurrect03.wav"};
-new const String:g_strReviveSoldier[][] = {"vo/soldier_mvm_resurrect01.wav", "vo/soldier_mvm_resurrect02.wav", "vo/soldier_mvm_resurrect03.wav", "vo/soldier_mvm_resurrect04.wav", "vo/soldier_mvm_resurrect05.wav", "vo/soldier_mvm_resurrect06.wav"};
-new const String:g_strReviveSpy[][] = {"vo/spy_mvm_resurrect01.wav", "vo/spy_mvm_resurrect02.wav", "vo/spy_mvm_resurrect03.wav", "vo/spy_mvm_resurrect04.wav", "vo/spy_mvm_resurrect05.wav", "vo/spy_mvm_resurrect06.wav", "vo/spy_mvm_resurrect07.wav", "vo/spy_mvm_resurrect08.wav", "vo/spy_mvm_resurrect09.wav"};
-new const String:g_strRevivePyro[][] = {"vo/pyro_sf13_spell_generic01.wav", "vo/pyro_autocappedcontrolpoint01.wav"};
+new const String:g_strReviveDemo[][] = {"vo/demoman_mvm_resurrect01.mp3", "vo/demoman_mvm_resurrect02.mp3", "vo/demoman_mvm_resurrect03.mp3", "vo/demoman_mvm_resurrect05.mp3", "vo/demoman_mvm_resurrect06.mp3", "vo/demoman_mvm_resurrect07.mp3", "vo/demoman_mvm_resurrect08.mp3", "vo/demoman_mvm_resurrect09.mp3", "vo/demoman_mvm_resurrect10.mp3", "vo/demoman_mvm_resurrect11.mp3"};
+new const String:g_strReviveEngie[][] = {"vo/engineer_mvm_resurrect01.mp3", "vo/engineer_mvm_resurrect02.mp3", "vo/engineer_mvm_resurrect03.mp3"};
+new const String:g_strReviveHeavy[][] = {"vo/heavy_mvm_resurrect01.mp3", "vo/heavy_mvm_resurrect02.mp3", "vo/heavy_mvm_resurrect04.mp3", "vo/heavy_mvm_resurrect05.mp3", "vo/heavy_mvm_resurrect06.mp3", "vo/heavy_mvm_resurrect07.mp3"};
+new const String:g_strReviveMedic[][] = {"vo/medic_mvm_resurrect01.mp3", "vo/medic_mvm_resurrect02.mp3", "vo/medic_mvm_resurrect03.mp3"};
+new const String:g_strReviveScout[][] = {"vo/scout_mvm_resurrect01.mp3", "vo/scout_mvm_resurrect02.mp3", "vo/scout_mvm_resurrect03.mp3", "vo/scout_mvm_resurrect04.mp3", "vo/scout_mvm_resurrect05.mp3", "vo/scout_mvm_resurrect06.mp3", "vo/scout_mvm_resurrect07.mp3", "vo/scout_mvm_resurrect08.mp3"};
+new const String:g_strReviveSniper[][] = {"vo/sniper_mvm_resurrect01.mp3", "vo/sniper_mvm_resurrect02.mp3", "vo/sniper_mvm_resurrect03.mp3"};
+new const String:g_strReviveSoldier[][] = {"vo/soldier_mvm_resurrect01.mp3", "vo/soldier_mvm_resurrect02.mp3", "vo/soldier_mvm_resurrect03.mp3", "vo/soldier_mvm_resurrect04.mp3", "vo/soldier_mvm_resurrect05.mp3", "vo/soldier_mvm_resurrect06.mp3"};
+new const String:g_strReviveSpy[][] = {"vo/spy_mvm_resurrect01.mp3", "vo/spy_mvm_resurrect02.mp3", "vo/spy_mvm_resurrect03.mp3", "vo/spy_mvm_resurrect04.mp3", "vo/spy_mvm_resurrect05.mp3", "vo/spy_mvm_resurrect06.mp3", "vo/spy_mvm_resurrect07.mp3", "vo/spy_mvm_resurrect08.mp3", "vo/spy_mvm_resurrect09.mp3"};
+new const String:g_strRevivePyro[][] = {"vo/pyro_sf13_spell_generic01.mp3", "vo/pyro_autocappedcontrolpoint01.mp3"};
 new const String:g_strSoundMarked[][] = {"weapons/samurai/tf_marked_for_death_impact_01.wav", "weapons/samurai/tf_marked_for_death_impact_02.wav", "weapons/samurai/tf_marked_for_death_impact_03.wav"};
 
-new const String:g_strSoundLastMan[][] = {"vo/announcer_am_lastmanalive01.wav", "vo/announcer_am_lastmanalive02.wav", "vo/announcer_am_lastmanalive03.wav", "vo/announcer_am_lastmanalive04.wav"};
-new const String:g_strSoundForfeit[][] = {"vo/announcer_am_lastmanforfeit01.wav", "vo/announcer_am_lastmanforfeit02.wav", "vo/announcer_am_lastmanforfeit03.wav", "vo/announcer_am_lastmanforfeit04.wav"};
+new const String:g_strSoundLastMan[][] = {"vo/announcer_am_lastmanalive01.mp3", "vo/announcer_am_lastmanalive02.mp3", "vo/announcer_am_lastmanalive03.mp3", "vo/announcer_am_lastmanalive04.mp3"};
+new const String:g_strSoundForfeit[][] = {"vo/announcer_am_lastmanforfeit01.mp3", "vo/announcer_am_lastmanforfeit02.mp3", "vo/announcer_am_lastmanforfeit03.mp3", "vo/announcer_am_lastmanforfeit04.mp3"};
 
 new const String:g_strTeamColors[][] = {"\x07B2B2B2", "\x07B2B2B2", "\x07FF4040", "\x0799CCFF"};
 
@@ -1019,7 +1019,7 @@ public Event_PointCaptured(Handle:hEvent, const String:strEventName[], bool:bDon
 		// Player revived the entire team
 		Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived_EntireTeam", LANG_SERVER, "\x07FFD700", 0x01);
 	}else{
-		Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived", LANG_SERVER, "\x07CF7336", iCount);
+		Format(strChat, sizeof(strChat), "%s\x01 %T", strChat, "Res_Chat_Revived", LANG_SERVER, "\x07CF7336", iCount, 0x01);
 	}
 	PrintToChatAll(strChat);
 }
@@ -1423,7 +1423,7 @@ public Event_PlayerDeath(Handle:hEvent, const String:strEventName[], bool:bDontB
 			if(iNumLeftAttacker == 1 && iNumLeftVictim - iNumLeftAttacker >= GetConVarFloat(g_hCvarLastRites))
 			{
 				new iAttacker = GetClientOfUserId(GetEventInt(hEvent, "attacker"));
-				if(iAttacker >= 1 && iAttacker <= MaxClients && IsClientInGame(iAttacker) && IsPlayerAlive(iAttacker))
+				if(iAttacker >= 1 && iAttacker <= MaxClients && IsClientInGame(iAttacker) && GetClientTeam(iAttacker) != iTeam && IsPlayerAlive(iAttacker))
 				{
 					PrintToChatAll("%s %T", PLUGIN_PREFIX, "Res_Chat_LastRites", LANG_SERVER, g_strTeamColors[GetClientTeam(iAttacker)], iAttacker, 0x01, "\x07EF4293", 0x01);
 					
